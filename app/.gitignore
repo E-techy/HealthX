@@ -1,0 +1,19 @@
+# Local build artifacts
+/build
+
+# Automatically generated Android Studio / Gradle files for this module
+*.iml
+/*.jks
+/*.keystore
+/*.pk8
+/*.pem
+
+# Sensitive API Keys and Production Configurations (Add as your backend expands)
+# Un-comment these lines if you place these files directly inside the app module folder:
+# google-services.json
+# secret.properties
+local.properties
+
+# Crashlytics and performance monitoring mapping files
+/proguard-project.txt
+/sonar-project.properties
