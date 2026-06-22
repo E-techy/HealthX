@@ -138,24 +138,37 @@ fun AccountCard(
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Profile Image or Initial Placeholder
         if (!account.profilePhotoUrl.isNullOrBlank()) {
-            AsyncImage(
+            coil.compose.SubcomposeAsyncImage(
                 model = account.profilePhotoUrl,
                 contentDescription = "Profile Picture",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(50.dp).clip(CircleShape)
+                modifier = Modifier.size(50.dp).clip(CircleShape),
+                loading = {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                },
+                error = {
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(Color(0xFF2C2C2C)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = account.initials, color = MaterialTheme.colorScheme.primary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             )
         } else {
             Box(
                 modifier = Modifier.size(50.dp).clip(CircleShape).background(Color(0xFF2C2C2C)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = account.initials,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(text = account.initials, color = MaterialTheme.colorScheme.primary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
         }
 

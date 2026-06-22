@@ -12,6 +12,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import retrofit2.Response
+import android.net.Uri
+import com.example.healthx.utils.FileHelper
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val api = AuthApi.create()
@@ -56,8 +62,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         email = body.user.email,
                         name = body.user.name,
                         token = body.token!!,
-                        profilePhotoUrl = body.user.profilePhotoUrl // Safely capturing the URL from the backend
-                    )
+                        profilePhotoUrl = formatImageUrl(body.user.profilePhotoUrl)                    )
                     sessionManager.saveAccountAndSetActive(account)
                     onSuccess("Login Successful: Welcome back, ${body.user.name}")
                 } else {
@@ -84,11 +89,29 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Added profilePhotoUrl as an optional parameter for when you implement the image picker
-    fun signup(name: String, email: String, pass: String, profilePhotoUrl: String? = null, onOtpSent: () -> Unit) {
+    fun signup(name: String, email: String, pass: String, profilePhotoUri: Uri? = null, onOtpSent: () -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val response = api.signup(AuthRequest(email = email, password = pass, name = name, profilePhotoUrl = profilePhotoUrl))
+                // 1. Convert text fields to RequestBody
+                val namePart = name.toRequestBody("text/plain".toMediaTypeOrNull())
+                val emailPart = email.toRequestBody("text/plain".toMediaTypeOrNull())
+                val passPart = pass.toRequestBody("text/plain".toMediaTypeOrNull())
+
+                // 2. Safely convert the URI to a File and wrap it in a MultipartBody.Part
+                var imagePart: MultipartBody.Part? = null
+                if (profilePhotoUri != null) {
+                    val file = FileHelper.getFileFromUri(getApplication(), profilePhotoUri)
+                    if (file != null) {
+                        val requestFile = file.asRequestBody("image/*".toMediaTypeOrNull())
+                        // The string "profileImage" here MUST exactly match the Node.js multer configuration
+                        imagePart = MultipartBody.Part.createFormData("profileImage", file.name, requestFile)
+                    }
+                }
+
+                // 3. Send the Multipart request
+                val response = api.signup(namePart, emailPart, passPart, imagePart)
+
                 if (response.isSuccessful) {
                     pendingVerificationEmail = email
                     onOtpSent()
@@ -96,11 +119,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     _authError.value = parseError(response)
                 }
             } catch (e: Exception) {
-                _authError.value = "Network error: Make sure backend is running."
+                _authError.value = "Network error: Make sure backend is running. ${e.localizedMessage}"
             } finally { _isLoading.value = false }
         }
     }
-
     fun verifyOtp(otp: String, onSuccess: (String) -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -113,8 +135,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         email = body.user.email,
                         name = body.user.name,
                         token = body.token!!,
-                        profilePhotoUrl = body.user.profilePhotoUrl // Safely capturing the URL from the backend
+                        profilePhotoUrl = formatImageUrl(body.user.profilePhotoUrl)
                     )
+
+
                     sessionManager.saveAccountAndSetActive(account)
                     onSuccess("Signup Complete: Email Verified!")
                 } else {
@@ -170,5 +194,28 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 _authError.value = "Network error."
             } finally { _isLoading.value = false }
         }
+    }
+
+    // --- ADD THIS HELPER FUNCTION ---
+    private fun formatImageUrl(url: String?): String? {
+        if (url.isNullOrBlank()) return null
+        if (url.startsWith("http")) return url // Already an absolute URL
+
+        // Ensure forward slashes (in case Node.js is running on Windows)
+        val cleanPath = url.replace("\\", "/")
+
+        // Grab the base URL (e.g., http://192.168.1.100:5001/api/auth/)
+        // and strip the "api/auth/" part to get the pure server root.
+        val serverRoot = com.example.healthx.BuildConfig.BASE_URL.replace("api/auth/", "")
+
+        // Combine them safely
+        val finalUrl = if (cleanPath.startsWith("/")) {
+            serverRoot.dropLast(1) + cleanPath
+        } else {
+            serverRoot + cleanPath
+        }
+
+        Log.d("ProfileImageTracker", "Final Formatted URL saved to device: $finalUrl")
+        return finalUrl
     }
 }

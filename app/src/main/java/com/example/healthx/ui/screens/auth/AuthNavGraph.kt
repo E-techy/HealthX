@@ -1,13 +1,21 @@
 package com.example.healthx.ui.screens.auth
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -15,14 +23,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 
 @Composable
-fun AuthNavGraph(onAuthSuccess: (String) -> Unit) {
+fun AuthNavGraph(onAuthSuccess: (String) -> Unit, onBackToAccounts: () -> Unit) {
     val navController = rememberNavController()
     val authViewModel: AuthViewModel = viewModel()
 
-    // Global Error Popup Listener
     val error by authViewModel.authError.collectAsState()
     if (error != null) {
         AlertDialog(
@@ -44,7 +52,8 @@ fun AuthNavGraph(onAuthSuccess: (String) -> Unit) {
                 viewModel = authViewModel,
                 onNavigateToSignup = { navController.navigate("signup") },
                 onNavigateToForgotPwd = { navController.navigate("forgot_pwd") },
-                onLoginSuccess = onAuthSuccess
+                onLoginSuccess = onAuthSuccess,
+                onBackToAccounts = onBackToAccounts
             )
         }
         composable("signup") {
@@ -55,10 +64,7 @@ fun AuthNavGraph(onAuthSuccess: (String) -> Unit) {
             )
         }
         composable("verify_otp") {
-            VerifyOtpScreen(
-                viewModel = authViewModel,
-                onVerifySuccess = onAuthSuccess
-            )
+            VerifyOtpScreen(viewModel = authViewModel, onVerifySuccess = onAuthSuccess)
         }
         composable("forgot_pwd") {
             ForgotPasswordScreen(
@@ -70,9 +76,7 @@ fun AuthNavGraph(onAuthSuccess: (String) -> Unit) {
         composable("reset_pwd") {
             ResetPasswordScreen(
                 viewModel = authViewModel,
-                onResetSuccess = {
-                    navController.navigate("login") { popUpTo("login") { inclusive = true } }
-                }
+                onResetSuccess = { navController.navigate("login") { popUpTo("login") { inclusive = true } } }
             )
         }
     }
@@ -82,10 +86,19 @@ fun AuthNavGraph(onAuthSuccess: (String) -> Unit) {
 // LOGIN SCREEN
 // ==========================================
 @Composable
-fun LoginScreen(viewModel: AuthViewModel, onNavigateToSignup: () -> Unit, onNavigateToForgotPwd: () -> Unit, onLoginSuccess: (String) -> Unit) {
+fun LoginScreen(
+    viewModel: AuthViewModel,
+    onNavigateToSignup: () -> Unit,
+    onNavigateToForgotPwd: () -> Unit,
+    onLoginSuccess: (String) -> Unit,
+    onBackToAccounts: () -> Unit
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val isLoading by viewModel.isLoading.collectAsState()
+
+    // Check if device has any saved accounts
+    val savedAccounts by viewModel.sessionManager.savedAccountsFlow.collectAsState(initial = emptyList())
 
     Column(
         modifier = Modifier.fillMaxSize().background(Color.Black).padding(24.dp),
@@ -120,6 +133,14 @@ fun LoginScreen(viewModel: AuthViewModel, onNavigateToSignup: () -> Unit, onNavi
             Text("Don't have an account? ", color = Color.Gray)
             Text("Sign Up", color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { onNavigateToSignup() })
         }
+
+        // Show back button ONLY if they have accounts to go back to
+        if (savedAccounts.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(32.dp))
+            TextButton(onClick = onBackToAccounts) {
+                Text("Back to Saved Accounts", color = Color.Gray)
+            }
+        }
     }
 }
 
@@ -131,7 +152,12 @@ fun SignupScreen(viewModel: AuthViewModel, onNavigateToLogin: () -> Unit, onOtpS
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var profileImageUri by remember { mutableStateOf<Uri?>(null) }
     val isLoading by viewModel.isLoading.collectAsState()
+
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        profileImageUri = uri
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().background(Color.Black).padding(24.dp),
@@ -139,7 +165,29 @@ fun SignupScreen(viewModel: AuthViewModel, onNavigateToLogin: () -> Unit, onOtpS
         verticalArrangement = Arrangement.Center
     ) {
         Text("Create an Account", style = MaterialTheme.typography.headlineLarge, color = Color.White)
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Image Picker UI
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF1E1E1E))
+                .clickable { galleryLauncher.launch("image/*") },
+            contentAlignment = Alignment.Center
+        ) {
+            if (profileImageUri != null) {
+                AsyncImage(
+                    model = profileImageUri,
+                    contentDescription = "Profile Photo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(Icons.Default.AddAPhoto, contentDescription = "Add Photo", tint = Color.Gray, modifier = Modifier.size(32.dp))
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White))
         Spacer(modifier = Modifier.height(16.dp))
@@ -150,7 +198,10 @@ fun SignupScreen(viewModel: AuthViewModel, onNavigateToLogin: () -> Unit, onOtpS
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = { viewModel.signup(name, email, password, onOtpSent = onOtpSent) },
+            onClick = {
+                // Pass the local URI string to the ViewModel
+                viewModel.signup(name, email, password, profilePhotoUri = profileImageUri, onOtpSent = onOtpSent)
+            },
             modifier = Modifier.fillMaxWidth().height(50.dp), enabled = !isLoading && name.isNotBlank() && email.isNotBlank() && password.isNotBlank()
         ) {
             if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp)) else Text("Sign Up")
@@ -164,9 +215,7 @@ fun SignupScreen(viewModel: AuthViewModel, onNavigateToLogin: () -> Unit, onOtpS
     }
 }
 
-// ==========================================
-// OTP VERIFICATION SCREEN
-// ==========================================
+// ... Keep VerifyOtpScreen, ForgotPasswordScreen, and ResetPasswordScreen exactly as they were ...
 @Composable
 fun VerifyOtpScreen(viewModel: AuthViewModel, onVerifySuccess: (String) -> Unit) {
     var otp by remember { mutableStateOf("") }
@@ -202,9 +251,6 @@ fun VerifyOtpScreen(viewModel: AuthViewModel, onVerifySuccess: (String) -> Unit)
     }
 }
 
-// ==========================================
-// FORGOT PASSWORD SCREEN
-// ==========================================
 @Composable
 fun ForgotPasswordScreen(viewModel: AuthViewModel, onNavigateBack: () -> Unit, onOtpSent: () -> Unit) {
     var email by remember { mutableStateOf("") }
@@ -234,9 +280,6 @@ fun ForgotPasswordScreen(viewModel: AuthViewModel, onNavigateBack: () -> Unit, o
     }
 }
 
-// ==========================================
-// RESET PASSWORD SCREEN
-// ==========================================
 @Composable
 fun ResetPasswordScreen(viewModel: AuthViewModel, onResetSuccess: () -> Unit) {
     var otp by remember { mutableStateOf("") }

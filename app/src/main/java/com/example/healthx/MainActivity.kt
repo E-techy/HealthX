@@ -41,42 +41,52 @@ fun RootApp() {
     val launchViewModel: AccountSelectionViewModel = viewModel()
     val launchState by launchViewModel.launchState.collectAsState()
 
-    // We observe the active account to pass it directly to the HomeScreen
     val context = LocalContext.current
     val sessionManager = remember { SessionManager(context) }
+
+    // Collect the full list of accounts to know if we have multiples
+    val accountsList by sessionManager.savedAccountsFlow.collectAsState(initial = emptyList())
     val activeAccount by sessionManager.activeAccountFlow.collectAsState(initial = null)
 
-    // UI Routing States to manually override the launcher
     var showAuthScreen by remember { mutableStateOf(false) }
     var showHomeScreen by remember { mutableStateOf(false) }
 
-    // ROUTE 1: If Home is triggered and we have an account, show Home!
+    // ROUTE 1: Home Screen
     if (showHomeScreen && activeAccount != null) {
         HomeScreen(
             account = activeAccount!!,
+            hasMultipleAccounts = accountsList.size > 1,
             onLogoutRequested = {
-                // For testing purposes, reset states to go back to the beginning
+                // Temporary logout logic for testing
+                showHomeScreen = false
+                showAuthScreen = true
+            },
+            onSwitchAccountRequested = {
+                // Turn off both manual overrides so it falls back to LaunchState (which will show the picker)
                 showHomeScreen = false
                 showAuthScreen = false
             }
         )
-        return // Stop executing the rest of the UI
+        return
     }
 
-    // ROUTE 2: If Auth is triggered (via no accounts OR clicking "Add Account"), show Auth!
+    // ROUTE 2: Auth Screen
     if (showAuthScreen) {
         AuthNavGraph(
             onAuthSuccess = { message ->
                 Log.d("AuthFlow", "Login Success: $message")
-                // Turn off Auth screen and turn on Home screen
                 showAuthScreen = false
                 showHomeScreen = true
+            },
+            onBackToAccounts = {
+                // If they click "Back to Accounts" from the login screen
+                showAuthScreen = false
             }
         )
-        return // Stop executing the rest of the UI
+        return
     }
 
-    // ROUTE 3: Initial Launch Logic
+    // ROUTE 3: Base Launch Logic
     when (val state = launchState) {
         is LaunchState.Loading -> {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
@@ -85,33 +95,35 @@ fun RootApp() {
         }
 
         is LaunchState.NoAccounts -> {
-            // Automatically trigger the Auth flow if zero accounts exist
-            LaunchedEffect(Unit) {
-                showAuthScreen = true
-            }
+            LaunchedEffect(Unit) { showAuthScreen = true }
         }
 
         is LaunchState.SingleAccount -> {
-            // Automatically trigger Home if exactly one account exists
-            LaunchedEffect(Unit) {
-                showHomeScreen = true
+            // Check dynamically: if they deleted an account and dropped to 1, or just booted up with 1
+            if (accountsList.size <= 1) {
+                LaunchedEffect(Unit) { showHomeScreen = true }
+            } else {
+                // If state hasn't caught up to reality, force the picker
+                AccountSelectionScreen(
+                    accounts = accountsList,
+                    onAccountSelected = { account ->
+                        launchViewModel.selectAccount(account) { showHomeScreen = true }
+                    },
+                    onAddNewAccount = { showAuthScreen = true },
+                    onRemoveAccount = { accountId, onSuccess ->
+                        launchViewModel.removeAccount(accountId, onSuccess)
+                    }
+                )
             }
         }
 
         is LaunchState.MultipleAccounts -> {
-            // Show the Account Picker
             AccountSelectionScreen(
                 accounts = state.accounts,
                 onAccountSelected = { account ->
-                    // Set this account as active, then route to Home
-                    launchViewModel.selectAccount(account) {
-                        showHomeScreen = true
-                    }
+                    launchViewModel.selectAccount(account) { showHomeScreen = true }
                 },
-                onAddNewAccount = {
-                    showAuthScreen = true
-                },
-                // UPDATED: Pass the success callback into the ViewModel
+                onAddNewAccount = { showAuthScreen = true },
                 onRemoveAccount = { accountId, onSuccess ->
                     launchViewModel.removeAccount(accountId, onSuccess)
                 }

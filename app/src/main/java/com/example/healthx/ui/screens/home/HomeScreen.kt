@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,7 +23,9 @@ import com.example.healthx.data.local.SavedAccount
 @Composable
 fun HomeScreen(
     account: SavedAccount,
-    onLogoutRequested: () -> Unit // Useful for testing switching accounts later
+    hasMultipleAccounts: Boolean,
+    onLogoutRequested: () -> Unit,
+    onSwitchAccountRequested: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -30,6 +33,11 @@ fun HomeScreen(
                 title = { Text("HealthX", color = Color.White) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF121212)),
                 actions = {
+                    if (hasMultipleAccounts) {
+                        IconButton(onClick = onSwitchAccountRequested) {
+                            Icon(Icons.Default.SwitchAccount, contentDescription = "Switch Account", tint = Color.Gray)
+                        }
+                    }
                     IconButton(onClick = onLogoutRequested) {
                         Icon(Icons.Default.Logout, contentDescription = "Logout", tint = Color.Gray)
                     }
@@ -47,35 +55,40 @@ fun HomeScreen(
         ) {
             // Profile Image Rendering
             if (!account.profilePhotoUrl.isNullOrBlank()) {
-                AsyncImage(
+                coil.compose.SubcomposeAsyncImage(
                     model = account.profilePhotoUrl,
                     contentDescription = "Profile Picture",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(120.dp)
-                        .clip(CircleShape)
+                        .clip(CircleShape),
+                    loading = {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
+                    },
+                    error = {
+                        // Safe fallback if the server is offline or URL is broken
+                        Box(
+                            modifier = Modifier.fillMaxSize().background(Color(0xFF2C2C2C)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = account.initials, color = MaterialTheme.colorScheme.primary, fontSize = 48.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 )
             } else {
-                // Fallback to stylized initials if no photo exists
+                // Fallback to stylized initials if no photo URL exists at all
                 Box(
-                    modifier = Modifier
-                        .size(120.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF2C2C2C)),
+                    modifier = Modifier.size(120.dp).clip(CircleShape).background(Color(0xFF2C2C2C)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = account.initials,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 48.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(text = account.initials, color = MaterialTheme.colorScheme.primary, fontSize = 48.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Welcome Text
             Text(
                 text = "Hi, ${account.name}",
                 style = MaterialTheme.typography.headlineMedium,
@@ -91,13 +104,19 @@ fun HomeScreen(
                 fontSize = 16.sp
             )
 
-            // Helpful tag to see if you are in guest mode
             if (account.isGuest) {
                 Spacer(modifier = Modifier.height(16.dp))
                 SuggestionChip(
                     onClick = { },
                     label = { Text("Guest Mode Active", color = MaterialTheme.colorScheme.primary) }
                 )
+            }
+
+            if (hasMultipleAccounts) {
+                Spacer(modifier = Modifier.height(24.dp))
+                OutlinedButton(onClick = onSwitchAccountRequested) {
+                    Text("Switch Account")
+                }
             }
         }
     }
