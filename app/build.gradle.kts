@@ -7,6 +7,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+configurations.all {
+    exclude(group = "com.google.protobuf", module = "protobuf-java")
+}
 
 android {
     namespace = "com.example.healthx"
@@ -38,6 +41,10 @@ android {
 
         val baseUrl = localProperties.getProperty("BACKEND_BASE_URL") ?: "http://10.0.2.2:5001/api/auth/"
         buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
+
+        // ADD THESE TWO LINES FOR THE IMAGE URL
+        val imageBaseUrl = localProperties.getProperty("IMAGE_BASE_URL") ?: "http://10.0.2.2:5001/"
+        buildConfigField("String", "IMAGE_BASE_URL", "\"$imageBaseUrl\"")
     }
 
     buildTypes {
@@ -78,6 +85,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.cronet.embedded)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

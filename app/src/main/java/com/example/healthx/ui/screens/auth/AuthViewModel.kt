@@ -18,6 +18,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.chromium.base.Log
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val api = AuthApi.create()
@@ -199,23 +200,19 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     // --- ADD THIS HELPER FUNCTION ---
     private fun formatImageUrl(url: String?): String? {
         if (url.isNullOrBlank()) return null
-        if (url.startsWith("http")) return url // Already an absolute URL
 
-        // Ensure forward slashes (in case Node.js is running on Windows)
-        val cleanPath = url.replace("\\", "/")
-
-        // Grab the base URL (e.g., http://192.168.1.100:5001/api/auth/)
-        // and strip the "api/auth/" part to get the pure server root.
-        val serverRoot = com.example.healthx.BuildConfig.BASE_URL.replace("api/auth/", "")
-
-        // Combine them safely
-        val finalUrl = if (cleanPath.startsWith("/")) {
-            serverRoot.dropLast(1) + cleanPath
+        // Find the start of the actual file path, ignoring any hardcoded "localhost"
+        val relativePath = if (url.contains("/public/")) {
+            url.substring(url.indexOf("/public/")).replace("\\", "/")
         } else {
-            serverRoot + cleanPath
+            url.replace("\\", "/")
         }
 
-        Log.d("ProfileImageTracker", "Final Formatted URL saved to device: $finalUrl")
+        // Grab the base URL from local.properties and remove any trailing slash
+        val baseUrl = com.example.healthx.BuildConfig.IMAGE_BASE_URL.removeSuffix("/")
+
+        val finalUrl = baseUrl + relativePath
+
+        android.util.Log.d("ProfileImageTracker", "Final Formatted URL: $finalUrl")
         return finalUrl
-    }
-}
+    }}

@@ -41,8 +41,16 @@ interface AuthApi {
 
     companion object {
         fun create(): AuthApi {
+            // Create a custom client with 30-second timeouts
+            val client = okhttp3.OkHttpClient.Builder()
+                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+
             return Retrofit.Builder()
                 .baseUrl(BuildConfig.BASE_URL)
+                .client(client) // Attach the client here
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(AuthApi::class.java)
