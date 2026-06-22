@@ -35,6 +35,9 @@ android {
 
         // Expose it to the app
         buildConfigField("String", "GEMINI_API_KEY", "\"$apiKey\"")
+
+        val baseUrl = localProperties.getProperty("BACKEND_BASE_URL") ?: "http://10.0.2.2:5001/api/auth/"
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
     }
 
     buildTypes {
@@ -67,6 +70,7 @@ android {
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.runtime)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
@@ -95,4 +99,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation(libs.androidx.navigation.compose)
 }
