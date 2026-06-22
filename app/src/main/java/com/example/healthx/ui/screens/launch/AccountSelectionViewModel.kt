@@ -51,4 +51,13 @@ class AccountSelectionViewModel(application: Application) : AndroidViewModel(app
             onSelected()
         }
     }
+
+    fun removeAccount(accountId: String) {
+        viewModelScope.launch {
+            // Call your new utility function
+            com.example.healthx.utils.AccountUtils.completelyRemoveAccount(getApplication(), accountId)
+
+            // The UI will automatically refresh because it is observing sessionManager.savedAccountsFlow
+        }
+    }
 }

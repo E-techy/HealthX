@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -26,7 +27,8 @@ import com.example.healthx.data.local.SavedAccount
 fun AccountSelectionScreen(
     accounts: List<SavedAccount>,
     onAccountSelected: (SavedAccount) -> Unit,
-    onAddNewAccount: () -> Unit
+    onAddNewAccount: () -> Unit,
+    onRemoveAccount: (String) -> Unit // ADDED: Callback for removal
 ) {
     Column(
         modifier = Modifier
@@ -49,7 +51,11 @@ fun AccountSelectionScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(accounts) { account ->
-                AccountCard(account = account, onClick = { onAccountSelected(account) })
+                AccountCard(
+                    account = account,
+                    onClick = { onAccountSelected(account) },
+                    onRemoveClick = { onRemoveAccount(account.accountId) } // ADDED: Trigger removal
+                )
             }
 
             item {
@@ -70,7 +76,11 @@ fun AccountSelectionScreen(
 }
 
 @Composable
-fun AccountCard(account: SavedAccount, onClick: () -> Unit) {
+fun AccountCard(
+    account: SavedAccount,
+    onClick: () -> Unit,
+    onRemoveClick: () -> Unit // ADDED: Remove callback
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -109,9 +119,18 @@ fun AccountCard(account: SavedAccount, onClick: () -> Unit) {
 
         Spacer(modifier = Modifier.width(16.dp))
 
-        Column {
+        Column(modifier = Modifier.weight(1f)) { // Added weight so text doesn't overlap the trash icon
             Text(text = account.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             Text(text = account.email, color = Color.Gray, fontSize = 14.sp)
+        }
+
+        // ADDED: The Remove Account Button
+        IconButton(onClick = onRemoveClick) {
+            Icon(
+                imageVector = Icons.Default.DeleteOutline,
+                contentDescription = "Remove Account",
+                tint = Color.Gray
+            )
         }
     }
 }

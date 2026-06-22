@@ -24,6 +24,7 @@ data class SavedAccount(
         get() = if (name.isNotBlank()) name.take(1).uppercase() else "?"
 }
 
+
 class SessionManager(private val context: Context) {
     private val gson = Gson()
     private val ACCOUNTS_KEY = stringPreferencesKey("saved_accounts_list")
@@ -63,6 +64,22 @@ class SessionManager(private val context: Context) {
     suspend fun switchActiveAccount(accountId: String) {
         context.dataStore.edit { prefs ->
             prefs[ACTIVE_ACCOUNT_ID_KEY] = accountId
+        }
+    }
+    suspend fun removeAccount(accountId: String) {
+        context.dataStore.edit { prefs ->
+            val json = prefs[ACCOUNTS_KEY] ?: "[]"
+            val type = object : TypeToken<MutableList<SavedAccount>>() {}.type
+            val accounts: MutableList<SavedAccount> = gson.fromJson(json, type)
+
+            // Remove the account from the list
+            accounts.removeAll { it.accountId == accountId }
+            prefs[ACCOUNTS_KEY] = gson.toJson(accounts)
+
+            // If the active account was the one removed, clear the active ID
+            if (prefs[ACTIVE_ACCOUNT_ID_KEY] == accountId) {
+                prefs.remove(ACTIVE_ACCOUNT_ID_KEY)
+            }
         }
     }
 }
