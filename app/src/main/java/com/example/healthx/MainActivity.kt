@@ -99,14 +99,21 @@ fun RootApp() {
         }
 
         is LaunchState.MultipleAccounts -> {
+            // Show the Account Picker
             AccountSelectionScreen(
                 accounts = state.accounts,
                 onAccountSelected = { account ->
-                    launchViewModel.selectAccount(account) { showHomeScreen = true }
+                    // Set this account as active, then route to Home
+                    launchViewModel.selectAccount(account) {
+                        showHomeScreen = true
+                    }
                 },
-                onAddNewAccount = { showAuthScreen = true },
-                onRemoveAccount = { accountId ->
-                    launchViewModel.removeAccount(accountId)
+                onAddNewAccount = {
+                    showAuthScreen = true
+                },
+                // UPDATED: Pass the success callback into the ViewModel
+                onRemoveAccount = { accountId, onSuccess ->
+                    launchViewModel.removeAccount(accountId, onSuccess)
                 }
             )
         }

@@ -52,12 +52,22 @@ class AccountSelectionViewModel(application: Application) : AndroidViewModel(app
         }
     }
 
-    fun removeAccount(accountId: String) {
+    fun removeAccount(accountId: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
-            // Call your new utility function
+            // 1. Delete from permanent storage
             com.example.healthx.utils.AccountUtils.completelyRemoveAccount(getApplication(), accountId)
 
-            // The UI will automatically refresh because it is observing sessionManager.savedAccountsFlow
+            // 2. Fetch the updated list immediately
+            val updatedAccounts = sessionManager.savedAccountsFlow.first()
+
+            // 3. Update the UI state based on what is left
+            _launchState.value = when (updatedAccounts.size) {
+                0 -> LaunchState.NoAccounts
+                else -> LaunchState.MultipleAccounts(updatedAccounts) // Keeps them on the picker even if 1 is left
+            }
+
+            // 4. Trigger the success popup in the UI
+            onSuccess()
         }
     }
 }
