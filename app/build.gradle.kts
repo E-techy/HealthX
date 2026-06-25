@@ -5,6 +5,9 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+
+    // ADD THIS LINE TO APPLY THE FIREBASE PLUGIN:
+    id("com.google.gms.google-services")
 }
 
 configurations.all {
@@ -28,7 +31,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // 2. Read the API key securely from local.properties
+        // Read the API key securely from local.properties
         val localProperties = Properties()
         val localPropertiesFile = rootProject.file("local.properties")
         if (localPropertiesFile.exists()) {
@@ -42,7 +45,6 @@ android {
         val baseUrl = localProperties.getProperty("BACKEND_BASE_URL") ?: "http://10.0.2.2:5001/api/auth/"
         buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
 
-        // ADD THESE TWO LINES FOR THE IMAGE URL
         val imageBaseUrl = localProperties.getProperty("IMAGE_BASE_URL") ?: "http://10.0.2.2:5001/"
         buildConfigField("String", "IMAGE_BASE_URL", "\"$imageBaseUrl\"")
     }
@@ -67,7 +69,6 @@ android {
         resources {
             excludes += "/META-INF/INDEX.LIST"
             excludes += "/META-INF/DEPENDENCIES"
-            // Adding a few other common duplicate offenders just in case
             excludes += "/META-INF/*.kotlin_module"
             excludes += "/META-INF/AL2.0"
             excludes += "/META-INF/LGPL2.1"
@@ -111,4 +112,13 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation(libs.androidx.navigation.compose)
+
+    // ==========================================
+    // ADD THESE LINES FOR FIREBASE CLOUD MESSAGING
+    // ==========================================
+    // Import the Firebase BoM
+    implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
+    // Add the dependency for the Firebase Cloud Messaging library
+    // When using the BoM, you don't specify versions in Firebase library dependencies
+    implementation("com.google.firebase:firebase-messaging")
 }

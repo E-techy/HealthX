@@ -1,21 +1,20 @@
 package com.example.healthx
 
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import com.example.healthx.permissions_manager.PermissionManager
 import com.example.healthx.ui.screens.reminders.RemindersNavGraph
 import com.example.healthx.ui.theme.HealthXTheme
+import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var permissionManager: PermissionManager
+    private val TAG = "FCM_TOKEN_TEST"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,17 +24,36 @@ class MainActivity : ComponentActivity() {
         permissionManager = PermissionManager(this)
         permissionManager.checkAndRequestAllPermissions()
 
+        // Fetch and Log the FCM Token for Backend Testing
+        fetchFCMToken()
+
         setContent {
             HealthXTheme {
-                // If the app hasn't been terminated by the script, safely render the application graph
                 RemindersNavGraph()
             }
         }
     }
 
+    private fun fetchFCMToken() {
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w(TAG, "Fetching FCM registration token failed", task.exception)
+                return@addOnCompleteListener
+            }
+
+            // Get new FCM registration token
+            val token = task.result
+            Log.d(TAG, "==============================================")
+            Log.d(TAG, "YOUR FCM TOKEN IS: $token")
+            Log.d(TAG, "==============================================")
+
+            // Optional: Toast so you see it visually on the device
+            Toast.makeText(baseContext, "FCM Token Logged!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
-        // Re-verify flags in case the user returned from manual system settings toggle
         permissionManager.checkOnResume()
     }
 }
