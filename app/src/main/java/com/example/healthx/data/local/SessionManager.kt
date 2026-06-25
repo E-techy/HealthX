@@ -1,7 +1,9 @@
 package com.example.healthx.data.local
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
@@ -81,5 +83,22 @@ class SessionManager(private val context: Context) {
                 prefs.remove(ACTIVE_ACCOUNT_ID_KEY)
             }
         }
+    }
+
+    // Keys
+    private val IS_SYNC_ENABLED_KEY = booleanPreferencesKey("is_sync_enabled")
+    private val LAST_SYNC_TIME_KEY = longPreferencesKey("last_sync_time")
+
+    // Flows for the UI or Sync Worker to observe
+    val isSyncEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[IS_SYNC_ENABLED_KEY] ?: true }
+    val lastSyncTimeFlow: Flow<Long> = context.dataStore.data.map { it[LAST_SYNC_TIME_KEY] ?: 0L }
+
+    // Update Functions
+    suspend fun setSyncEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[IS_SYNC_ENABLED_KEY] = enabled }
+    }
+
+    suspend fun updateLastSyncTime(timestamp: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { it[LAST_SYNC_TIME_KEY] = timestamp }
     }
 }
