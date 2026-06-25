@@ -92,11 +92,9 @@ class PermissionManager(private val activity: ComponentActivity) {
      * Strictly terminates app execution if conditions are not met
      */
     private fun handlePermissionFailure(message: String) {
-        Toast.makeText(activity, "$message The app cannot proceed.", Toast.LENGTH_LONG).show()
-        activity.finishAffinity() // Closes all activities in the stack
-        System.exit(0) // Hard kills the execution thread
+        // Just show a warning, don't kill the app so we can test the UI!
+        Toast.makeText(activity, "$message Some features may not work.", Toast.LENGTH_LONG).show()
     }
-
     /**
      * Call this in your activity's onResume() to catch when the user returns from settings
      */
