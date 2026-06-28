@@ -24,4 +24,7 @@ interface NotificationDao {
 
     @Query("DELETE FROM common_notifications WHERE expiryTimeEpoch <= :currentTimeMillis")
     suspend fun deleteExpiredNotifications(currentTimeMillis: Long)
+
+    @Query("DELETE FROM common_notifications WHERE notificationId = :id")
+    suspend fun deleteNotificationById(id: String)
 }
