@@ -121,4 +121,8 @@ dependencies {
     // Add the dependency for the Firebase Cloud Messaging library
     // When using the BoM, you don't specify versions in Firebase library dependencies
     implementation("com.google.firebase:firebase-messaging")
+
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
 }
