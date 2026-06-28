@@ -11,7 +11,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.io.IOException
 
 /**
  * FcmTokenSyncManager handles the synchronization of the Firebase Cloud Messaging (FCM) token
@@ -25,6 +24,7 @@ import java.io.IOException
  * backendUrl = "[http://10.0.2.2:5001/api/device/token](http://10.0.2.2:5001/api/device/token)",
  * jwtToken = "eyJhbGciOi...",
  * deviceId = "android_test_device_001",
+ * deviceName = "Samsung Galaxy S23",
  * syncMode = SyncMode.ONLINE
  * )
  * * // 2. OFFLINE Mode (Smart/Lazy Sync - Good for app startup)
@@ -33,6 +33,7 @@ import java.io.IOException
  * backendUrl = "[http://10.0.2.2:5001/api/device/token](http://10.0.2.2:5001/api/device/token)",
  * jwtToken = "eyJhbGciOi...",
  * deviceId = "android_test_device_001",
+ * deviceName = "Samsung Galaxy S23",
  * syncMode = SyncMode.OFFLINE
  * )
  * ```
@@ -53,11 +54,13 @@ class FcmTokenSyncManager(private val context: Context) {
 
     /**
      * Syncs the FCM token to the backend server based on the provided mode.
+     * Wrapped entirely in a try-catch to ensure it is completely safe to call from anywhere.
      */
     suspend fun syncToken(
         backendUrl: String,
         jwtToken: String,
         deviceId: String,
+        deviceName: String,
         syncMode: SyncMode = SyncMode.ONLINE
     ) {
         withContext(Dispatchers.IO) {
@@ -70,7 +73,7 @@ class FcmTokenSyncManager(private val context: Context) {
                     SyncMode.ONLINE -> {
                         // Always send to the server
                         Log.d(TAG, "ONLINE Mode: Forcing token upload to server.")
-                        val success = uploadTokenToServer(backendUrl, jwtToken, deviceId, realToken)
+                        val success = uploadTokenToServer(backendUrl, jwtToken, deviceId, deviceName, realToken)
                         if (success) {
                             saveTokenLocally(realToken)
                         }
@@ -82,7 +85,7 @@ class FcmTokenSyncManager(private val context: Context) {
 
                         if (locallySavedToken == null || locallySavedToken != realToken) {
                             Log.d(TAG, "OFFLINE Mode: Mismatch detected. Local: $locallySavedToken, Real: $realToken. Uploading...")
-                            val success = uploadTokenToServer(backendUrl, jwtToken, deviceId, realToken)
+                            val success = uploadTokenToServer(backendUrl, jwtToken, deviceId, deviceName, realToken)
 
                             // ONLY update the local representation if the server successfully received it (200 OK)
                             if (success) {
@@ -97,7 +100,8 @@ class FcmTokenSyncManager(private val context: Context) {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error during FCM token sync: ${e.message}")
+                // Catch-all for Firebase fetching errors or coroutine cancellations
+                Log.e(TAG, "Critical error during FCM token sync execution: ${e.message}")
             }
         }
     }
@@ -110,12 +114,14 @@ class FcmTokenSyncManager(private val context: Context) {
         url: String,
         jwtToken: String,
         deviceId: String,
+        deviceName: String,
         fcmToken: String
     ): Boolean {
         return try {
             // Build the JSON Payload
             val jsonObject = JSONObject().apply {
                 put("deviceId", deviceId)
+                put("deviceName", deviceName)
                 put("fcmToken", fcmToken)
             }
 
@@ -136,8 +142,9 @@ class FcmTokenSyncManager(private val context: Context) {
             response.close() // Always close the response to prevent memory leaks
 
             isSuccess
-        } catch (e: IOException) {
-            Log.e(TAG, "Network exception while uploading token: ${e.message}")
+        } catch (e: Exception) {
+            // Broadened exception catch to handle IOException (Network) or JSONException
+            Log.e(TAG, "Exception while building or uploading token: ${e.message}")
             false
         }
     }
