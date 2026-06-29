@@ -29,6 +29,8 @@
         android:theme="@style/Theme.HealthX"
         android:usesCleartextTraffic="true">
 
+        <receiver android:name=".notification_manager.notification_category.SubscriptionActionReceiver" android:exported="false" />
+
         <service
             android:name=".reminders.scheduler.AlarmRingingService"
             android:exported="false"
