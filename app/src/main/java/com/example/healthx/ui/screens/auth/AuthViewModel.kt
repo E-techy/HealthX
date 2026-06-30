@@ -19,9 +19,10 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.chromium.base.Log
+import com.example.healthx.data.network.RetrofitClient
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
-    private val api = AuthApi.create()
+    private val api = RetrofitClient.authApi
     val sessionManager = SessionManager(application)
 
     private val _isLoading = MutableStateFlow(false)

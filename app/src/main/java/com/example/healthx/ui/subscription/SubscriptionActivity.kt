@@ -27,7 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.healthx.MainActivity
 import com.example.healthx.data.local.SessionManager
-import com.example.healthx.data.network.RetrofitClient // Assume you have a network module supplying the API
+import com.example.healthx.data.network.RetrofitClient
 import com.example.healthx.data.network.SubscriptionPlan
 import com.razorpay.Checkout
 import com.razorpay.PaymentData
@@ -46,7 +46,6 @@ class SubscriptionActivity : ComponentActivity(), PaymentResultWithDataListener 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Preload Razorpay Checkout for faster loading
         Checkout.preload(applicationContext)
 
         val passedSubscriptionId = intent.getStringExtra("EXTRA_SUBSCRIPTION_ID")
@@ -72,11 +71,11 @@ class SubscriptionActivity : ComponentActivity(), PaymentResultWithDataListener 
             val options = JSONObject()
             options.put("name", "HealthX")
             options.put("description", "$planName - $desc")
-            options.put("image", "https://s3.amazonaws.com/rzp-mobile/images/rzp.jpg") // Replace with your logo URL
+            options.put("image", "https://s3.amazonaws.com/rzp-mobile/images/rzp.jpg")
             options.put("order_id", orderId)
             options.put("theme.color", "#3399cc")
             options.put("currency", "INR")
-            options.put("amount", amount) // Amount in paise
+            options.put("amount", amount)
             options.put("retry", JSONObject().apply { put("enabled", true); put("max_count", 4) })
 
             checkout.open(this, options)
@@ -84,8 +83,6 @@ class SubscriptionActivity : ComponentActivity(), PaymentResultWithDataListener 
             Toast.makeText(this, "Error in payment: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
-
-    // --- Razorpay Callbacks ---
 
     override fun onPaymentSuccess(razorpayPaymentId: String?, paymentData: PaymentData?) {
         if (paymentData != null) {
@@ -114,7 +111,6 @@ fun SubscriptionScreenContainer(
     val uiState by viewModel.uiState.collectAsState()
     var activeSubscriptionId by remember { mutableStateOf(initialSubscriptionId) }
 
-    // Fetch initial data based on intent
     LaunchedEffect(activeSubscriptionId) {
         if (activeSubscriptionId != null && uiState is SubscriptionState.Idle) {
             viewModel.fetchPlanDetails(activeSubscriptionId!!)
@@ -123,21 +119,31 @@ fun SubscriptionScreenContainer(
         }
     }
 
-    // Trigger Razorpay when order is created
+    // Listens for critical UI State changes (Checkout Success OR Not Logged In)
     LaunchedEffect(uiState) {
-        if (uiState is SubscriptionState.OrderCreated) {
-            val order = (uiState as SubscriptionState.OrderCreated).orderData
-            onLaunchRazorpay(order.orderId, order.amount, order.keyId, order.planName, order.planDescription)
+        when (uiState) {
+            is SubscriptionState.OrderCreated -> {
+                val order = (uiState as SubscriptionState.OrderCreated).orderData
+                onLaunchRazorpay(order.orderId, order.amount, order.keyId, order.planName, order.planDescription)
+            }
+            is SubscriptionState.NotLoggedIn -> {
+                Toast.makeText(context, "Please log in to continue with the subscription.", Toast.LENGTH_LONG).show()
+                // Redirect to MainActivity which handles the Launch/Auth graph
+                val intent = Intent(context, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                (context as Activity).finish()
+            }
+            else -> {}
         }
     }
 
     BackHandler {
         if (activeSubscriptionId != null && initialSubscriptionId == null) {
-            // Came from the list view originally, go back to list
             activeSubscriptionId = null
             viewModel.fetchAllPlans()
         } else {
-            // Came directly from notification to a specific ID, or at top level list
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
             }
@@ -212,7 +218,7 @@ fun SubscriptionScreenContainer(
                         }
                     }
                 }
-                else -> {} // Idle or OrderCreated (Handled by LaunchedEffect)
+                else -> {} // Handled by LaunchedEffect or Idle
             }
         }
     }

@@ -23,6 +23,7 @@ sealed class SubscriptionState {
     data class OrderCreated(val orderData: OrderData) : SubscriptionState()
     object PaymentVerified : SubscriptionState()
     data class Error(val message: String) : SubscriptionState()
+    object NotLoggedIn : SubscriptionState() // <-- NEW STATE ADDED
 }
 
 class SubscriptionViewModel(
@@ -53,8 +54,6 @@ class SubscriptionViewModel(
         viewModelScope.launch {
             _uiState.value = SubscriptionState.Loading
             try {
-                // To save a network call if we already have the data, we could fetch from DB,
-                // but we will use the single endpoint for accuracy.
                 val response = api.getPlanById(subscriptionId)
                 if (response.isSuccessful && response.body()?.success == true && response.body()?.data != null) {
                     _uiState.value = SubscriptionState.SinglePlanLoaded(response.body()!!.data!!)
@@ -70,9 +69,11 @@ class SubscriptionViewModel(
     fun initiateCheckout(subscriptionId: String) {
         viewModelScope.launch {
             _uiState.value = SubscriptionState.Loading
+
             val token = getBearerToken()
+            // Check if the user is logged in before hitting the protected route
             if (token == null) {
-                _uiState.value = SubscriptionState.Error("User not logged in")
+                _uiState.value = SubscriptionState.NotLoggedIn
                 return@launch
             }
 
@@ -92,7 +93,12 @@ class SubscriptionViewModel(
     fun verifyPayment(orderId: String, paymentId: String, signature: String) {
         viewModelScope.launch {
             _uiState.value = SubscriptionState.Loading
-            val token = getBearerToken() ?: return@launch
+
+            val token = getBearerToken()
+            if (token == null) {
+                _uiState.value = SubscriptionState.NotLoggedIn
+                return@launch
+            }
 
             try {
                 val request = VerifyPaymentRequest(orderId, paymentId, signature)
@@ -114,6 +120,8 @@ class SubscriptionViewModel(
 
     private suspend fun getBearerToken(): String? {
         val account = sessionManager.activeAccountFlow.firstOrNull()
+        // If it's a guest account, treat as logged out for payments
+        if (account?.isGuest == true) return null
         return account?.token?.let { "Bearer $it" }
     }
 }
