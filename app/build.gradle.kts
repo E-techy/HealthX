@@ -125,14 +125,10 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
-    // Coil for Jetpack Compose (Image Loading)
-    implementation("io.coil-kt:coil-compose:2.4.0")
 
     // Room Database
-    val room_version = "2.6.1"
-    implementation("androidx.room:room-runtime:$room_version")
-    implementation("androidx.room:room-ktx:$room_version")
-    // Use ksp instead of kapt if you are using Kotlin Symbol Processing
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation("com.razorpay:checkout:1.6.38")
 }

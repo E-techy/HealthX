@@ -36,13 +36,18 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+
         <service
-            android:name=".network.HealthXFirebaseService"
-            android:exported="false">
+            android:name=".notification_manager.HealthXMessagingService"
+            android:exported="true">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name=".notification_manager.notification_category.SubscriptionActionReceiver"
+            android:exported="false" />
 
         <receiver
             android:name=".reminders.scheduler.AlarmReceiver"
