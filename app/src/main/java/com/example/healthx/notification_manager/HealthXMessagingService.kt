@@ -9,61 +9,89 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class HealthXMessagingService : FirebaseMessagingService() {
 
-    // A Coroutine Scope specifically for this service to run database/download tasks in the background
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
+        Log.d("FCM_DEBUG", "------------------------------------------------")
+        Log.d("FCM_DEBUG", "1. onMessageReceived: PAYLOAD INTERCEPTED!")
 
-        // Firebase payloads are delivered in the 'data' map
         val data = remoteMessage.data
 
         if (data.isNotEmpty()) {
-            val categoryString = data["category"] ?: return
+            Log.d("FCM_DEBUG", "2. Raw Data Payload: $data")
 
-            // Route the notification based on its category
+            // 1. Get the category from the correct top-level key your server is using
+            val categoryString = data["notificationType"]
+
+            if (categoryString == null) {
+                Log.e("FCM_DEBUG", "❌ ERROR: No 'notificationType' found in top-level payload! Cannot route.")
+                return
+            }
+
+            Log.d("FCM_DEBUG", "3. Category Identified: $categoryString")
+
+            // 2. Extract and parse the nested payload string
+            val payloadDataString = data["payloadData"] ?: "{}"
+            val jsonPayload = try {
+                JSONObject(payloadDataString)
+            } catch (e: Exception) {
+                Log.e("FCM_DEBUG", "❌ ERROR: Failed to parse payloadData as JSON: ${e.message}")
+                JSONObject()
+            }
+
             serviceScope.launch {
                 try {
                     val category = NotificationCategory.valueOf(categoryString)
-                    routeNotification(category, data)
+                    routeNotification(category, jsonPayload)
                 } catch (e: IllegalArgumentException) {
-                    Log.e("FCM", "Unknown notification category received: $categoryString")
+                    Log.e("FCM_DEBUG", "❌ ERROR: Unknown category enum: $categoryString")
                 } catch (e: Exception) {
-                    Log.e("FCM", "Error processing notification: ${e.message}")
+                    Log.e("FCM_DEBUG", "❌ ERROR during routing: ${e.message}")
+                    e.printStackTrace()
                 }
             }
+        } else {
+            Log.e("FCM_DEBUG", "❌ ERROR: Payload data is empty!")
         }
     }
 
-    private suspend fun routeNotification(category: NotificationCategory, data: Map<String, String>) {
-        val notificationId = data["notificationId"] ?: System.currentTimeMillis().toString()
-        val title = data["title"] ?: "HealthX"
-        val smallDescription = data["smallDescription"] ?: ""
-        val fullDescription = data["fullDescription"]
-        val imageUrl = data["imageUrl"]
+    // Notice we now pass a JSONObject instead of a Map<String, String>
+    private suspend fun routeNotification(category: NotificationCategory, jsonPayload: JSONObject) {
+        Log.d("FCM_DEBUG", "4. Routing Notification for category: ${category.name}")
+
+        // optString safely extracts the value, or uses a default if the key is missing
+        val notificationId = jsonPayload.optString("notificationId", System.currentTimeMillis().toString())
+        val title = jsonPayload.optString("title", "HealthX")
+
+        // Check for 'body' first, then 'smallDescription'
+        var smallDescription = jsonPayload.optString("body", "")
+        if (smallDescription.isEmpty()) {
+            smallDescription = jsonPayload.optString("smallDescription", "")
+        }
+
+        val fullDescription = jsonPayload.optString("fullDescription", null)
+        val imageUrl = jsonPayload.optString("imageUrl", null)
+
+        Log.d("FCM_DEBUG", "5. Extracted Data -> Title: '$title', Desc: '$smallDescription'")
 
         when (category) {
-            // ==========================================
-            // 1. COMMON NOTIFICATIONS LOOP
-            // ==========================================
             NotificationCategory.OTP,
             NotificationCategory.NEW_DEVICE_REGISTERED,
             NotificationCategory.NEW_AI_CHAT_RECEIVED,
             NotificationCategory.ADVERTISEMENT -> {
+                Log.d("FCM_DEBUG", "6. Entering COMMON NOTIFICATION loop")
+                val deepLinkUrl = jsonPayload.optString("deepLinkUrl", null)
+                val expiryTimeEpoch = jsonPayload.optLong("expiryTimeEpoch", System.currentTimeMillis() + 604800000L)
 
-                val deepLinkUrl = data["deepLinkUrl"]
-                // Default expiry to 7 days if not provided
-                val expiryTimeEpoch = data["expiryTimeEpoch"]?.toLongOrNull() ?: (System.currentTimeMillis() + 604800000L)
-
-                // 1a. Initialize local dependencies
                 val dao = AppDatabase.getDatabase(applicationContext).notificationDao()
                 val repository = NotificationRepository(dao)
                 val displayManager = NotificationDisplayManager(applicationContext)
 
-                // 1b. Save to Room Database FIRST
                 repository.saveCommonNotification(
                     notificationId = notificationId,
                     category = category.name,
@@ -74,8 +102,8 @@ class HealthXMessagingService : FirebaseMessagingService() {
                     deepLinkUrl = deepLinkUrl,
                     expiryTimeEpoch = expiryTimeEpoch
                 )
+                Log.d("FCM_DEBUG", "7. Saved to Room DB")
 
-                // 1c. Trigger the physical pop-up
                 displayManager.handleInitialNotification(
                     notificationId = notificationId,
                     category = category.name,
@@ -83,43 +111,42 @@ class HealthXMessagingService : FirebaseMessagingService() {
                     smallDescription = smallDescription,
                     imageUrl = imageUrl
                 )
+                Log.d("FCM_DEBUG", "8. Passed to DisplayManager")
             }
 
-            // ==========================================
-            // 2. SUBSCRIPTION NOTIFICATION LOOP
-            // ==========================================
             NotificationCategory.SUBSCRIPTION -> {
+                Log.d("FCM_DEBUG", "6. Entering SUBSCRIPTION loop")
 
-                val subscriptionId = data["subscriptionId"] // Unique payload for this category
+                // Extract subscription ID safely from the JSON object
+                var subscriptionId = jsonPayload.optString("subscriptionDbId", "")
+                if (subscriptionId.isEmpty()) {
+                    subscriptionId = jsonPayload.optString("subscriptionId", "")
+                }
+                // Convert empty strings back to null if needed by your handler
+                val finalSubId = if (subscriptionId.isNotEmpty()) subscriptionId else null
+
+                Log.d("FCM_DEBUG", "7. Extracted Subscription ID: $finalSubId")
 
                 val subscriptionHandler = SubscriptionNotificationHandler(applicationContext)
 
-                // Trigger the specialized subscription pop-up (with Subscribe/Ignore buttons)
                 subscriptionHandler.handleNotification(
                     notificationIdString = notificationId,
                     title = title,
                     smallDescription = smallDescription,
                     imageUrl = imageUrl,
-                    subscriptionId = subscriptionId
+                    subscriptionId = finalSubId
                 )
+                Log.d("FCM_DEBUG", "8. Passed to SubscriptionNotificationHandler")
             }
 
-            // ==========================================
-            // 3. FUTURE LOOPS (Payments, Reminders, etc.)
-            // ==========================================
             else -> {
-                Log.d("FCM", "Category ${category.name} routing not yet implemented.")
+                Log.d("FCM_DEBUG", "❌ Category ${category.name} routing not yet implemented.")
             }
         }
     }
 
-    /**
-     * Called whenever a new FCM token is generated for the device.
-     * You should send this token to your Node.js backend so it knows where to send pushes.
-     */
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d("FCM", "New Token: $token")
-        // TODO: Send this token to your backend via an API call (e.g., api/users/update-fcm-token)
+        Log.d("FCM_DEBUG", "New Token: $token")
     }
 }

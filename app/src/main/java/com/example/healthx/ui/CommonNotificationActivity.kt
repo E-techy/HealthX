@@ -123,15 +123,19 @@ fun NotificationScreenContainer(viewModel: NotificationViewModel) {
                 ) {
                     items(
                         items = notifications,
-                        key = { it.notificationId }
-                    ) { notification ->
+                        key = { it.notificationId } // 'it' is fine here for the key selector
+                    ) { notification -> // You named the item 'notification' here
                         NotificationCard(
                             notification = notification,
                             onClick = {
-                                viewModel.markAsRead(it.notificationId)
-                                selectedNotification = it
+                                // Use 'notification' instead of 'it'
+                                viewModel.markAsRead(notification.notificationId)
+                                selectedNotification = notification
                             },
-                            onDelete = { viewModel.deleteNotification(it.notificationId) }
+                            onDelete = {
+                                // Use 'notification' instead of 'it'
+                                viewModel.deleteNotification(notification.notificationId)
+                            }
                         )
                     }
                 }

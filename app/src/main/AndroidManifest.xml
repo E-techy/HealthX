@@ -4,16 +4,13 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
@@ -29,13 +26,10 @@
         android:theme="@style/Theme.HealthX"
         android:usesCleartextTraffic="true">
 
-        <receiver android:name=".notification_manager.notification_category.SubscriptionActionReceiver" android:exported="false" />
-
         <service
             android:name=".reminders.scheduler.AlarmRingingService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
-
 
         <service
             android:name=".notification_manager.HealthXMessagingService"
@@ -52,8 +46,7 @@
         <receiver
             android:name=".reminders.scheduler.AlarmReceiver"
             android:enabled="true"
-            android:exported="false">
-        </receiver>
+            android:exported="false" />
 
         <activity
             android:name=".MainActivity"
@@ -66,6 +59,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.subscription.SubscriptionActivity"
+            android:exported="false"
+            android:label="Subscriptions"
+            android:theme="@style/Theme.HealthX"
+            android:windowSoftInputMode="adjustResize" />
 
     </application>
 </manifest>
