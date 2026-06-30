@@ -134,4 +134,5 @@ dependencies {
     implementation("androidx.room:room-ktx:$room_version")
     // Use ksp instead of kapt if you are using Kotlin Symbol Processing
     ksp(libs.androidx.room.compiler)
+    implementation("com.razorpay:checkout:1.6.38")
 }
