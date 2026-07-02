@@ -147,6 +147,16 @@ class HealthXMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d("FCM_DEBUG", "New Token: $token")
+        Log.d("FCM_DEBUG", "FCM forced a Token Refresh: $token")
+
+        // When FCM issues a brand-new token, immediately try to sync it for all accounts
+        serviceScope.launch {
+            try {
+                val syncManager = FcmTokenSyncManager(applicationContext)
+                syncManager.syncAllAccounts(FcmTokenSyncManager.SyncMode.ONLINE)
+            } catch (e: Exception) {
+                Log.e("FCM_DEBUG", "Failed to run background token sync on refresh: ${e.message}")
+            }
+        }
     }
 }
