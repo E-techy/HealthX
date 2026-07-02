@@ -1,29 +1,32 @@
 package com.example.healthx.ui.screens.auth
 
 import android.app.Application
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.healthx.data.local.SavedAccount
 import com.example.healthx.data.local.SessionManager
-import com.example.healthx.data.network.AuthApi
 import com.example.healthx.data.network.AuthRequest
+import com.example.healthx.data.network.RetrofitClient
+import com.example.healthx.notification_manager.FcmTokenSyncManager
+import com.example.healthx.utils.FileHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.json.JSONObject
-import retrofit2.Response
-import android.net.Uri
-import com.example.healthx.utils.FileHelper
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.chromium.base.Log
-import com.example.healthx.data.network.RetrofitClient
+import org.json.JSONObject
+import retrofit2.Response
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val api = RetrofitClient.authApi
     val sessionManager = SessionManager(application)
+
+    // Initialize the Sync Manager to update FCM tokens on login/signup
+    private val fcmSyncManager = FcmTokenSyncManager(application)
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
@@ -64,8 +67,16 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         email = body.user.email,
                         name = body.user.name,
                         token = body.token!!,
-                        profilePhotoUrl = formatImageUrl(body.user.profilePhotoUrl)                    )
+                        profilePhotoUrl = formatImageUrl(body.user.profilePhotoUrl)
+                    )
+
+                    // Save locally and set active
                     sessionManager.saveAccountAndSetActive(account)
+
+                    // SYNC FCM TOKEN TO BACKEND IMMEDIATELY AFTER LOGIN
+                    Log.d("AUTH_DEBUG", "Login successful. Triggering FCM token sync for new device/login.")
+                    fcmSyncManager.syncSingleAccount(account)
+
                     onSuccess("Login Successful: Welcome back, ${body.user.name}")
                 } else {
                     _authError.value = parseError(response)
@@ -86,11 +97,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 isGuest = true
             )
             sessionManager.saveAccountAndSetActive(guestAccount)
+            // Note: We do NOT sync FCM tokens for guest accounts as they have no backend representation
             onSuccess("Logged in securely as Guest (Local Mode)")
         }
     }
 
-    // Added profilePhotoUrl as an optional parameter for when you implement the image picker
     fun signup(name: String, email: String, pass: String, profilePhotoUri: Uri? = null, onOtpSent: () -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -125,6 +136,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             } finally { _isLoading.value = false }
         }
     }
+
     fun verifyOtp(otp: String, onSuccess: (String) -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -140,8 +152,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         profilePhotoUrl = formatImageUrl(body.user.profilePhotoUrl)
                     )
 
-
+                    // Save locally and set active
                     sessionManager.saveAccountAndSetActive(account)
+
+                    // SYNC FCM TOKEN TO BACKEND IMMEDIATELY AFTER VERIFIED SIGNUP
+                    Log.d("AUTH_DEBUG", "Signup verified. Triggering FCM token sync for new account.")
+                    fcmSyncManager.syncSingleAccount(account)
+
                     onSuccess("Signup Complete: Email Verified!")
                 } else {
                     _authError.value = parseError(response)
@@ -198,7 +215,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- ADD THIS HELPER FUNCTION ---
     private fun formatImageUrl(url: String?): String? {
         if (url.isNullOrBlank()) return null
 
@@ -214,6 +230,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
         val finalUrl = baseUrl + relativePath
 
-        android.util.Log.d("ProfileImageTracker", "Final Formatted URL: $finalUrl")
+        Log.d("ProfileImageTracker", "Final Formatted URL: $finalUrl")
         return finalUrl
-    }}
+    }
+}
