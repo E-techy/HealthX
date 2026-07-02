@@ -12,15 +12,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.healthx.data.local.SessionManager
 import com.example.healthx.utils.LocalActiveAccount
+import kotlinx.coroutines.launch
 
 data class CategoryMeta(val id: String, val title: String, val icon: ImageVector, val color: Color)
 
@@ -28,6 +33,11 @@ data class CategoryMeta(val id: String, val title: String, val icon: ImageVector
 @Composable
 fun RemindersHomeScreen(onCategoryClick: (String) -> Unit) {
     val user = LocalActiveAccount.current
+
+    // Needed to securely log out / switch accounts without breaking navigation
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val sessionManager = remember { SessionManager(context) }
 
     val categories = listOf(
         CategoryMeta("pharmacy", "Pharmacy & Pills", Icons.Default.Medication, Color(0xFFE53935)),
@@ -42,7 +52,23 @@ fun RemindersHomeScreen(onCategoryClick: (String) -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("Reminders", color = Color.White, fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF121212))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF121212)),
+                actions = {
+                    // Account Switch Button
+                    IconButton(onClick = {
+                        coroutineScope.launch {
+                            // Passing an empty string clears the active account.
+                            // MainActivity instantly reacts to this and shows the Account Selection screen automatically.
+                            sessionManager.switchActiveAccount("")
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = "Switch Account",
+                            tint = Color.White
+                        )
+                    }
+                }
             )
         },
         containerColor = Color.Black
