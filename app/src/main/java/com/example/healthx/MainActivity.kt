@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
 
         // Trigger the Smart FCM Sync in the background every time the app opens
         LaunchedEffect(Unit) {
-            fcmTokenSyncManager.syncAllAccounts(FcmTokenSyncManager.SyncMode.OFFLINE)
+            fcmTokenSyncManager.syncAllAccounts(FcmTokenSyncManager.SyncMode.ONLINE)
         }
 
         if (savedAccounts == null) {

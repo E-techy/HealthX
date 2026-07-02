@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 class FcmTokenSyncManager(private val context: Context) {
 
-    private val TAG = "FcmTokenSync"
+    private val TAG = "FCM_SYNC_DEBUG"
     private val sessionManager = SessionManager(context)
 
     private val client = OkHttpClient.Builder()
@@ -34,17 +34,11 @@ class FcmTokenSyncManager(private val context: Context) {
     private val SAVED_TOKEN_KEY = "CLOUD_MIRRORED_FCM_TOKEN"
     private val DEVICE_ID_KEY = "HEALTHX_DEVICE_ID"
 
-    // The endpoint your server will eventually use to register device tokens
-    private val BACKEND_URL = "${BuildConfig.BASE_URL}device/sync-token" // Adjust path as needed
+    // Verify this URL matches your Node.js route!
+    private val BACKEND_URL = "${BuildConfig.BASE_URL}device/sync-token"
 
-    enum class SyncMode {
-        ONLINE,  // Forces a network request to the backend for all accounts
-        OFFLINE  // Smart check: only networks if local token != real FCM token
-    }
+    enum class SyncMode { ONLINE, OFFLINE }
 
-    /**
-     * Gets a permanent, unique ID for this specific app installation.
-     */
     fun getDeviceId(): String {
         var deviceId = sharedPreferences.getString(DEVICE_ID_KEY, null)
         if (deviceId == null) {
@@ -54,9 +48,6 @@ class FcmTokenSyncManager(private val context: Context) {
         return deviceId
     }
 
-    /**
-     * Gets the hardware manufacturer and model (e.g., "Samsung SM-G998B")
-     */
     private fun getDeviceName(): String {
         val manufacturer = Build.MANUFACTURER
         val model = Build.MODEL
@@ -67,27 +58,28 @@ class FcmTokenSyncManager(private val context: Context) {
         }
     }
 
-    /**
-     * Main entry point. Loops through all logged-in accounts and syncs the token.
-     */
-    suspend fun syncAllAccounts(syncMode: SyncMode = SyncMode.OFFLINE) {
+    suspend fun syncAllAccounts(syncMode: SyncMode = SyncMode.ONLINE) {
         withContext(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Starting Token Sync Process. Mode: $syncMode")
+                Log.d(TAG, "--------------------------------------------------")
+                Log.d(TAG, "1. Starting Token Sync Process. Mode: $syncMode")
 
+                Log.d(TAG, "2. Requesting token from Firebase...")
                 val realToken = FirebaseMessaging.getInstance().token.await()
+                Log.d(TAG, "3. Firebase returned token: ${realToken.take(15)}...")
+
                 val locallySavedToken = sharedPreferences.getString(SAVED_TOKEN_KEY, null)
 
                 if (syncMode == SyncMode.OFFLINE && locallySavedToken == realToken) {
-                    Log.d(TAG, "Token is up-to-date. No network requests needed.")
+                    Log.d(TAG, "4. [ABORT] Token matches local cache. No network needed.")
                     return@withContext
                 }
 
-                // Token has changed or force sync requested. Fetch all accounts.
                 val accounts = sessionManager.savedAccountsFlow.first()
+                Log.d(TAG, "4. Found ${accounts.size} logged-in account(s) locally.")
 
                 if (accounts.isEmpty()) {
-                    Log.d(TAG, "No logged-in accounts to sync with. Storing token locally for future logins.")
+                    Log.d(TAG, "5. [ABORT] No accounts to sync with. Caching token.")
                     saveTokenLocally(realToken)
                     return@withContext
                 }
@@ -96,48 +88,47 @@ class FcmTokenSyncManager(private val context: Context) {
                 val deviceName = getDeviceName()
                 var allSyncsSuccessful = true
 
-                // Loop through every account and send an authenticated request
                 for (account in accounts) {
-                    if (account.isGuest) continue // Don't sync push tokens for offline guest accounts
+                    if (account.isGuest) {
+                        Log.d(TAG, "   -> Skipping Guest Account")
+                        continue
+                    }
 
-                    Log.d(TAG, "Syncing token for account: ${account.email}")
+                    Log.d(TAG, "5. Preparing POST request for account: ${account.email}")
                     val success = uploadTokenToServer(account.token, deviceId, deviceName, realToken)
 
                     if (!success) {
-                        Log.e(TAG, "Failed to sync token for account: ${account.email}")
+                        Log.e(TAG, "❌ Failed to sync token for account: ${account.email}")
                         allSyncsSuccessful = false
+                    } else {
+                        Log.d(TAG, "✅ Success for account: ${account.email}")
                     }
                 }
 
-                // If EVERY account successfully updated on the server, update the local mirrored token.
-                // If even one failed, we skip this, meaning the app will retry the whole loop next time it opens.
                 if (allSyncsSuccessful) {
                     saveTokenLocally(realToken)
-                    Log.d(TAG, "✅ Token sync complete for all accounts.")
+                    Log.d(TAG, "6. 🎉 All accounts synced. Local cache updated.")
                 } else {
-                    Log.w(TAG, "⚠️ Some accounts failed to sync. Will retry on next launch.")
+                    Log.w(TAG, "6. ⚠️ Sync incomplete. Will retry next launch.")
                 }
+                Log.d(TAG, "--------------------------------------------------")
 
             } catch (e: Exception) {
-                Log.e(TAG, "Critical error during FCM token sync: ${e.message}")
+                Log.e(TAG, "🔥 CRITICAL ERROR during sync: ${e.message}")
             }
         }
     }
 
-    /**
-     * Syncs the token for a SINGLE account. (Use this immediately after a user successfully logs in).
-     */
     suspend fun syncSingleAccount(account: SavedAccount) {
         withContext(Dispatchers.IO) {
             try {
                 if (account.isGuest) return@withContext
                 val realToken = FirebaseMessaging.getInstance().token.await()
+                Log.d(TAG, "Syncing single account immediately after auth: ${account.email}")
                 val success = uploadTokenToServer(account.token, getDeviceId(), getDeviceName(), realToken)
-                if (success) {
-                    Log.d(TAG, "✅ Token synced for new login: ${account.email}")
-                }
+                if (success) saveTokenLocally(realToken)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to sync token for new login: ${e.message}")
+                Log.e(TAG, "Failed single account sync: ${e.message}")
             }
         }
     }
@@ -152,6 +143,7 @@ class FcmTokenSyncManager(private val context: Context) {
 
             val requestBody = jsonObject.toString().toRequestBody("application/json".toMediaType())
 
+            Log.d(TAG, "   -> Hitting URL: $BACKEND_URL")
             val request = Request.Builder()
                 .url(BACKEND_URL)
                 .addHeader("Authorization", "Bearer $jwtToken")
@@ -163,13 +155,13 @@ class FcmTokenSyncManager(private val context: Context) {
             val isSuccess = response.isSuccessful
 
             if (!isSuccess) {
-                Log.e(TAG, "Server rejected token update. HTTP Code: ${response.code}")
+                Log.e(TAG, "   ❌ HTTP Error: ${response.code} - ${response.body?.string()}")
             }
 
             response.close()
             isSuccess
         } catch (e: Exception) {
-            Log.e(TAG, "Network exception uploading token: ${e.message}")
+            Log.e(TAG, "   ❌ Network Exception: ${e.message}")
             false
         }
     }

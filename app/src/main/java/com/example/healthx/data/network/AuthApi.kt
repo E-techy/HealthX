@@ -19,7 +19,7 @@ interface AuthApi {
 
     // UPDATED: Now uses Multipart for file uploads
     @Multipart
-    @POST("signup")
+    @POST("api/auth/signup")
     suspend fun signup(
         @Part("name") name: RequestBody,
         @Part("email") email: RequestBody,
@@ -27,16 +27,16 @@ interface AuthApi {
         @Part profileImage: MultipartBody.Part? // Optional image file
     ): Response<AuthResponse>
 
-    @POST("verify-otp")
+    @POST("api/auth/verify-otp")
     suspend fun verifyOtp(@Body req: AuthRequest): Response<AuthResponse>
 
-    @POST("login")
+    @POST("api/auth/login")
     suspend fun login(@Body req: AuthRequest): Response<AuthResponse>
 
-    @POST("forgot-password")
+    @POST("api/auth/forgot-password")
     suspend fun forgotPassword(@Body req: AuthRequest): Response<AuthResponse>
 
-    @POST("reset-password")
+    @POST("api/auth/reset-password")
     suspend fun resetPassword(@Body req: AuthRequest): Response<AuthResponse>
 
     companion object {
