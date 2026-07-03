@@ -8,8 +8,7 @@ data class SubscriptionStatusResponse(
     val success: Boolean,
     val status: String // Expected: "FREE", "PRO", "ULTRA"
 )
-
 interface HomeApi {
-    @GET("api/subscriptionstatus")
+    @GET("api/subscriptions/status")
     suspend fun getSubscriptionStatus(@Header("Authorization") token: String): Response<SubscriptionStatusResponse>
 }
