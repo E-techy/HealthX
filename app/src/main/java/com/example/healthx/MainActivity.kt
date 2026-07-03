@@ -13,16 +13,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.example.healthx.data.local.SessionManager
 import com.example.healthx.notification_manager.FcmTokenSyncManager
 import com.example.healthx.permissions_manager.PermissionManager
 import com.example.healthx.ui.screens.auth.AuthNavGraph
+import com.example.healthx.ui.screens.home.HomeScreen
 import com.example.healthx.ui.screens.launch.AccountSelectionScreen
 import com.example.healthx.ui.screens.launch.AccountSelectionViewModel
 import com.example.healthx.ui.screens.reminders.RemindersNavGraph
 import com.example.healthx.ui.theme.HealthXTheme
 import com.example.healthx.utils.LocalActiveAccount
 import com.google.firebase.FirebaseApp
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -48,6 +53,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun RootScreen() {
         val context = LocalContext.current
+        val coroutineScope = rememberCoroutineScope()
         val sessionManager = remember { SessionManager(context) }
         val fcmTokenSyncManager = remember { FcmTokenSyncManager(context) }
 
@@ -67,9 +73,44 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        // PATH 2: Main App - Now routes to HomeScreen first
         if (activeAccount != null && !forceShowAuth) {
             CompositionLocalProvider(LocalActiveAccount provides activeAccount!!) {
-                RemindersNavGraph()
+                val mainNavController = rememberNavController()
+
+                NavHost(navController = mainNavController, startDestination = "home") {
+
+                    // Default starting screen
+                    composable("home") {
+                        HomeScreen(
+                            account = activeAccount!!,
+                            hasMultipleAccounts = savedAccounts!!.size > 1,
+                            onNavigateToSettings = { /* TODO: mainNavController.navigate("settings") */ },
+                            onNavigateToApiKeys = { /* TODO: mainNavController.navigate("api_keys") */ },
+                            onNavigateToAiChat = { /* TODO: mainNavController.navigate("ai_chat") */ },
+                            onNavigateToReminders = { mainNavController.navigate("reminders") },
+                            onNavigateToScanner = { /* TODO: mainNavController.navigate("scanner") */ },
+                            onNavigateToSubscriptions = { /* TODO: mainNavController.navigate("subscriptions") */ },
+                            onSwitchAccountRequested = {
+                                coroutineScope.launch {
+                                    sessionManager.switchActiveAccount("") // Clears active account, triggering UI shift
+                                }
+                            },
+                            onLogoutRequested = {
+                                coroutineScope.launch {
+                                    sessionManager.removeAccount(activeAccount!!.accountId) // Deletes local session
+                                }
+                            }
+                        )
+                    }
+
+                    // Nested graph for Reminders
+                    composable("reminders") {
+                        RemindersNavGraph() // Uses its own internal navigation controller
+                    }
+
+                    // You can easily add the other screens (Scanner, Subscriptions) here as you build them
+                }
             }
         }
         else if (savedAccounts!!.isNotEmpty() && !forceShowAuth) {
@@ -92,8 +133,6 @@ class MainActivity : ComponentActivity() {
             AuthNavGraph(
                 onAuthSuccess = { accountId ->
                     forceShowAuth = false
-                    // NOTE: Your AuthViewModel should ideally call fcmTokenSyncManager.syncSingleAccount()
-                    // right after saving the new account to ensure the backend knows immediately.
                 },
                 onBackToAccounts = {
                     forceShowAuth = false
