@@ -26,4 +26,6 @@ object RetrofitClient {
     val authApi: AuthApi by lazy { retrofit.create(AuthApi::class.java) }
     val remindersApi: RemindersApi by lazy { retrofit.create(RemindersApi::class.java) }
     val subscriptionApi: SubscriptionApi by lazy { retrofit.create(SubscriptionApi::class.java) }
+
+    val homeApi: HomeApi by lazy { retrofit.create(HomeApi::class.java) }
 }
