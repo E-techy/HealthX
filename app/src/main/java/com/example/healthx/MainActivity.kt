@@ -28,6 +28,7 @@ import com.example.healthx.ui.theme.HealthXTheme
 import com.example.healthx.utils.LocalActiveAccount
 import com.google.firebase.FirebaseApp
 import kotlinx.coroutines.launch
+import com.example.healthx.ui.screens.scanner.QRScannerScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -80,36 +81,39 @@ class MainActivity : ComponentActivity() {
 
                 NavHost(navController = mainNavController, startDestination = "home") {
 
-                    // Default starting screen
                     composable("home") {
                         HomeScreen(
                             account = activeAccount!!,
                             hasMultipleAccounts = savedAccounts!!.size > 1,
-                            onNavigateToSettings = { /* TODO: mainNavController.navigate("settings") */ },
-                            onNavigateToApiKeys = { /* TODO: mainNavController.navigate("api_keys") */ },
-                            onNavigateToAiChat = { /* TODO: mainNavController.navigate("ai_chat") */ },
+                            onNavigateToSettings = { /* TODO */ },
+                            onNavigateToApiKeys = { /* TODO */ },
+                            onNavigateToAiChat = { /* TODO */ },
                             onNavigateToReminders = { mainNavController.navigate("reminders") },
-                            onNavigateToScanner = { /* TODO: mainNavController.navigate("scanner") */ },
-                            onNavigateToSubscriptions = { /* TODO: mainNavController.navigate("subscriptions") */ },
+                            onNavigateToScanner = { mainNavController.navigate("scanner") }, // Wired up!
+                            onNavigateToSubscriptions = { /* TODO */ },
                             onSwitchAccountRequested = {
                                 coroutineScope.launch {
-                                    sessionManager.switchActiveAccount("") // Clears active account, triggering UI shift
+                                    sessionManager.switchActiveAccount("")
                                 }
                             },
                             onLogoutRequested = {
                                 coroutineScope.launch {
-                                    sessionManager.removeAccount(activeAccount!!.accountId) // Deletes local session
+                                    sessionManager.removeAccount(activeAccount!!.accountId)
                                 }
                             }
                         )
                     }
 
-                    // Nested graph for Reminders
                     composable("reminders") {
-                        RemindersNavGraph() // Uses its own internal navigation controller
+                        RemindersNavGraph()
                     }
 
-                    // You can easily add the other screens (Scanner, Subscriptions) here as you build them
+                    // Add the QR Scanner route here!
+                    composable("scanner") {
+                        QRScannerScreen(
+                            onCloseClicked = { mainNavController.popBackStack() } // Goes back to Home
+                        )
+                    }
                 }
             }
         }

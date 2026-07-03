@@ -1,5 +1,6 @@
 package com.example.healthx.ui.screens.home
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,6 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -42,111 +45,160 @@ fun HomeScreen(
 
     val subStatus by viewModel.subscriptionStatus.collectAsState()
 
-    // Fetch status when the screen loads
     LaunchedEffect(account) {
         viewModel.fetchSubscriptionStatus(account)
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = Color(0xFF1E1E1E),
-                modifier = Modifier.width(300.dp)
-            ) {
-                DrawerHeader(account = account, subStatus = subStatus)
-
-                Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
-
-                // Scrollable Drawer Items
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 12.dp)
+    // Wrap everything in the animated background
+    AnimatedWaveBackground {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet(
+                    drawerContainerColor = Color(0xFF1E1E1E),
+                    modifier = Modifier.width(300.dp)
                 ) {
-                    DrawerItem(icon = Icons.Default.Settings, label = "Settings") {
-                        coroutineScope.launch { drawerState.close() }
-                        onNavigateToSettings()
-                    }
-                    DrawerItem(icon = Icons.Default.VpnKey, label = "API Keys") {
-                        coroutineScope.launch { drawerState.close() }
-                        onNavigateToApiKeys()
-                    }
-                    DrawerItem(icon = Icons.Default.Chat, label = "AI Chat") {
-                        coroutineScope.launch { drawerState.close() }
-                        onNavigateToAiChat()
-                    }
-                    DrawerItem(icon = Icons.Default.NotificationsActive, label = "Reminders") {
-                        coroutineScope.launch { drawerState.close() }
-                        onNavigateToReminders()
-                    }
-                    DrawerItem(icon = Icons.Default.QrCodeScanner, label = "Scanner") {
-                        coroutineScope.launch { drawerState.close() }
-                        onNavigateToScanner()
-                    }
-                    DrawerItem(icon = Icons.Default.CardMembership, label = "Subscriptions") {
-                        coroutineScope.launch { drawerState.close() }
-                        onNavigateToSubscriptions()
-                    }
+                    DrawerHeader(account = account, subStatus = subStatus)
 
-                    if (hasMultipleAccounts) {
-                        DrawerItem(icon = Icons.Default.SwitchAccount, label = "Switch Accounts") {
+                    Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 12.dp)
+                    ) {
+                        DrawerItem(icon = Icons.Default.Settings, label = "Settings") {
                             coroutineScope.launch { drawerState.close() }
-                            viewModel.switchAccount(onSuccess = onSwitchAccountRequested)
+                            onNavigateToSettings()
                         }
-                    }
-                }
+                        DrawerItem(icon = Icons.Default.VpnKey, label = "API Keys") {
+                            coroutineScope.launch { drawerState.close() }
+                            onNavigateToApiKeys()
+                        }
+                        DrawerItem(icon = Icons.Default.Chat, label = "AI Chat") {
+                            coroutineScope.launch { drawerState.close() }
+                            onNavigateToAiChat()
+                        }
+                        DrawerItem(icon = Icons.Default.NotificationsActive, label = "Reminders") {
+                            coroutineScope.launch { drawerState.close() }
+                            onNavigateToReminders()
+                        }
+                        DrawerItem(icon = Icons.Default.QrCodeScanner, label = "Scanner") {
+                            coroutineScope.launch { drawerState.close() }
+                            onNavigateToScanner()
+                        }
+                        DrawerItem(icon = Icons.Default.CardMembership, label = "Subscriptions") {
+                            coroutineScope.launch { drawerState.close() }
+                            onNavigateToSubscriptions()
+                        }
 
-                // Bottom Logout Button
-                Divider(color = Color.DarkGray, thickness = 1.dp)
-                DrawerItem(
-                    icon = Icons.Default.Logout,
-                    label = "Log Out",
-                    color = Color(0xFFE53935), // Red tint for logout
-                    modifier = Modifier.padding(12.dp)
-                ) {
-                    coroutineScope.launch { drawerState.close() }
-                    viewModel.logout(account.accountId, onSuccess = onLogoutRequested)
-                }
-            }
-        }
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("HealthX Dashboard", color = Color.White) },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF121212)),
-                    navigationIcon = {
-                        IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
-                            ProfileIcon(account = account, size = 32)
+                        if (hasMultipleAccounts) {
+                            DrawerItem(icon = Icons.Default.SwitchAccount, label = "Switch Accounts") {
+                                coroutineScope.launch { drawerState.close() }
+                                viewModel.switchAccount(onSuccess = onSwitchAccountRequested)
+                            }
                         }
                     }
-                )
-            },
-            containerColor = Color.Black
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "Welcome back, ${account.name}",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
+
+                    Divider(color = Color.DarkGray, thickness = 1.dp)
+                    DrawerItem(
+                        icon = Icons.Default.Logout,
+                        label = "Log Out",
+                        color = Color(0xFFE53935),
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        coroutineScope.launch { drawerState.close() }
+                        viewModel.logout(account.accountId, onSuccess = onLogoutRequested)
+                    }
+                }
+            }
+        ) {
+            Scaffold(
+                // Set to transparent so the animated wave shows through
+                containerColor = Color.Transparent,
+                topBar = {
+                    TopAppBar(
+                        // Changed to display the user's name
+                        title = { Text(account.name, color = Color.White, fontWeight = FontWeight.Bold) },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xBB121212)),
+                        navigationIcon = {
+                            IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                                ProfileIcon(account = account, size = 32)
+                            }
+                        }
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Tap your profile icon to access the menu.",
-                        color = Color.Gray,
-                        fontSize = 16.sp
-                    )
+                },
+                // Sticky center-bottom button for the Scanner
+                floatingActionButtonPosition = FabPosition.Center,
+                floatingActionButton = {
+                    FloatingActionButton(
+                        onClick = onNavigateToScanner,
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                        shape = CircleShape,
+                        modifier = Modifier.size(64.dp)
+                    ) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = "QR Scanner", modifier = Modifier.size(32.dp))
+                    }
+                }
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Welcome back, ${account.name}",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Tap your profile icon to access the menu.",
+                            color = Color.LightGray,
+                            fontSize = 16.sp
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+// --- ANIMATED BACKGROUND ---
+@Composable
+fun AnimatedWaveBackground(content: @Composable () -> Unit) {
+    val infiniteTransition = rememberInfiniteTransition()
+    val offset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1500f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
+    // Cinematic dark/purple/blue cosmic wave
+    val brush = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF0A0A14),
+            Color(0xFF141432),
+            Color(0xFF1E0B2D),
+            Color(0xFF0A0A14)
+        ),
+        start = Offset(offset, offset / 2),
+        end = Offset(offset + 1000f, offset + 1000f)
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(brush)
+    ) {
+        content()
     }
 }
 
@@ -171,7 +223,6 @@ fun DrawerHeader(account: SavedAccount, subStatus: String) {
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Subscription Badge
         Surface(
             shape = CircleShape,
             color = getStatusColor(subStatus).copy(alpha = 0.2f),
@@ -207,7 +258,6 @@ fun ProfileIcon(account: SavedAccount, size: Int) {
 
 @Composable
 fun InitialsFallback(account: SavedAccount, size: Int) {
-    // Generate a consistent color based on the account name hash
     val colors = listOf(Color(0xFF1E88E5), Color(0xFF43A047), Color(0xFF8E24AA), Color(0xFFF4511E), Color(0xFF00ACC1))
     val bgColor = colors[account.name.hashCode().absoluteValue % colors.size]
 
@@ -249,9 +299,9 @@ fun DrawerItem(
 
 fun getStatusColor(status: String): Color {
     return when (status.uppercase()) {
-        "PRO" -> Color(0xFFFDD835) // Gold
-        "ULTRA" -> Color(0xFFE040FB) // Purple
-        "FREE" -> Color(0xFF9E9E9E) // Gray
-        else -> Color(0xFF1E88E5) // Blue for loading/other
+        "PRO" -> Color(0xFFFDD835)
+        "ULTRA" -> Color(0xFFE040FB)
+        "FREE" -> Color(0xFF9E9E9E)
+        else -> Color(0xFF1E88E5)
     }
 }
