@@ -41,6 +41,7 @@ fun HomeScreen(
     onNavigateToApiKeys: () -> Unit,
     onNavigateToAiChat: () -> Unit,
     onNavigateToReminders: () -> Unit,
+    onNavigateToAlarmManager: () -> Unit, // ADDED: Callback for Alarm Manager
     onNavigateToScanner: () -> Unit,
     onNavigateToSubscriptions: () -> Unit,
     onSwitchAccountRequested: () -> Unit,
@@ -68,6 +69,7 @@ fun HomeScreen(
                     drawerContainerColor = Color(0xFF1E1E1E),
                     modifier = Modifier.width(300.dp)
                 ) {
+                    // Passed the callback to open the QR Screen
                     DrawerHeader(
                         account = account,
                         subStatus = subStatus,
@@ -100,6 +102,13 @@ fun HomeScreen(
                             coroutineScope.launch { drawerState.close() }
                             onNavigateToReminders()
                         }
+
+                        // ADDED: Alarm Manager Drawer Item
+                        DrawerItem(icon = Icons.Default.AccessAlarm, label = "Alarm Manager") {
+                            coroutineScope.launch { drawerState.close() }
+                            onNavigateToAlarmManager()
+                        }
+
                         DrawerItem(icon = Icons.Default.QrCodeScanner, label = "Scanner") {
                             coroutineScope.launch { drawerState.close() }
                             onNavigateToScanner()

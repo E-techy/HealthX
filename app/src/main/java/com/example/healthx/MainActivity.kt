@@ -88,30 +88,22 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(
                             account = activeAccount!!,
                             hasMultipleAccounts = savedAccounts!!.size > 1,
-                            onNavigateToSettings = { /* TODO: Navigate to settings */ },
-                            onNavigateToApiKeys = { /* TODO: Navigate to api keys */ },
-
-                            // 1. Linked AI Chat
+                            onNavigateToSettings = { /* ... */ },
+                            onNavigateToApiKeys = { /* ... */ },
                             onNavigateToAiChat = { mainNavController.navigate("ai_chat") },
-
                             onNavigateToReminders = { mainNavController.navigate("reminders") },
-                            onNavigateToScanner = { mainNavController.navigate("scanner") },
 
-                            // 2. Linked Subscription (Fires Intent since it's an Activity)
+                            // ADDED: Triggers the actual Android Activity intent
+                            onNavigateToAlarmManager = {
+                                context.startActivity(Intent(context, com.example.healthx.alarm_manager.AlarmManagerActivity::class.java))
+                            },
+
+                            onNavigateToScanner = { mainNavController.navigate("scanner") },
                             onNavigateToSubscriptions = {
                                 context.startActivity(Intent(context, SubscriptionActivity::class.java))
                             },
-
-                            onSwitchAccountRequested = {
-                                coroutineScope.launch {
-                                    sessionManager.switchActiveAccount("")
-                                }
-                            },
-                            onLogoutRequested = {
-                                coroutineScope.launch {
-                                    sessionManager.removeAccount(activeAccount!!.accountId)
-                                }
-                            }
+                            onSwitchAccountRequested = { /* ... */ },
+                            onLogoutRequested = { /* ... */ }
                         )
                     }
 
@@ -161,6 +153,7 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
+
 
     override fun onResume() {
         super.onResume()
