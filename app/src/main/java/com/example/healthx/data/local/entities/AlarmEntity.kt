@@ -6,25 +6,31 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "alarms")
 data class AlarmEntity(
     @PrimaryKey(autoGenerate = true)
-    val id: Int = 0, // Used as the PendingIntent Request Code
+    val id: Int = 0,
 
-    val remoteId: String?, // The ID from your cloud database (UUID)
-    val triggerTimeMillis: Long, // Exact UTC millisecond timestamp
+    val remoteId: String?,
+    val triggerTimeMillis: Long,
 
-    val audioPlaybackType: String, // Enum: LOCAL_FILE, TTS, SERVER_STREAM
-    val localAudioUri: String?, // Path to file if type is LOCAL_FILE
-    val ttsContent: String?, // Text to read if type is TTS
+    // --- NEW: Categorization & Visuals ---
+    val category: String, // e.g., "MEDICATION", "HYDRATION", "APPOINTMENT"
+    val logoUrl: String?, // URL for the notification icon
 
-    val status: String, // Enum: PENDING, COMPLETED, CANCELLED
-    val isSnoozed: Boolean = false, // True if currently in a snooze cycle
+    // --- UPDATED: Audio Logic ---
+    // Enum: LOCAL_FILE, TTS, SERVER_STREAM, CLOUD_MEDIA
+    val audioPlaybackType: String,
+    val localAudioUri: String?,
+    val ttsContent: String?,
+    val cloudMediaUrl: String?, // NEW: URL to download/stream media
+
+    val status: String,
+    val isSnoozed: Boolean = false,
 
     val title: String,
     val description: String,
 
-    // Interval Scheduling
     val isRecurring: Boolean = false,
-    val recurrenceType: String?, // DAILY, WEEKLY, MONTHLY
-    val recurrenceInterval: Int?, // Every X days/weeks/months
-    val recurrenceStartDate: Long?, // UTC start date
-    val recurrenceEndDate: Long? // UTC end date
+    val recurrenceType: String?,
+    val recurrenceInterval: Int?,
+    val recurrenceStartDate: Long?,
+    val recurrenceEndDate: Long?
 )
