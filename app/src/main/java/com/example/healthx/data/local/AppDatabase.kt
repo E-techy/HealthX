@@ -10,22 +10,24 @@ import com.example.healthx.data.local.dao.ReminderDao
 import com.example.healthx.data.local.entities.ReminderEntity
 import com.example.healthx.notification_manager.NotificationDao
 import com.example.healthx.notification_manager.NotificationEntity
+import com.example.healthx.data.local.dao.AlarmDao
+import com.example.healthx.data.local.entities.AlarmEntity
 
 @Database(
     entities = [
-        ReminderEntity::class,       // Your existing reminder table
-        NotificationEntity::class    // ADDED: The new notification table
+        ReminderEntity::class,
+        NotificationEntity::class,
+        AlarmEntity::class           // ADDED: The new Alarm table
     ],
-    version = 2, // ADDED: Bumped version up to trigger schema update
+    version = 3,                     // ADDED: Bumped version from 2 to 3
     exportSchema = false
 )
-@TypeConverters(ReminderTypeConverters::class) // Your existing converters
+@TypeConverters(ReminderTypeConverters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun reminderDao(): ReminderDao
-
-    // ADDED: Expose the notification DAO so the repository can use it
     abstract fun notificationDao(): NotificationDao
+    abstract fun alarmDao(): AlarmDao  // ADDED: Expose the Alarm DAO
 
     companion object {
         @Volatile
@@ -38,7 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "healthx_database"
                 )
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration() // Wipes data on version bump during dev
                     .build()
                 INSTANCE = instance
                 instance
