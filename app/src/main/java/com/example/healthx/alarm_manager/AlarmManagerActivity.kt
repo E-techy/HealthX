@@ -194,9 +194,9 @@ fun CreateAlarmSection(viewModel: AlarmManagerViewModel, onCreated: () -> Unit) 
     var ttsContent by remember { mutableStateOf("Please take your medication.") }
     var localAudioUri by remember { mutableStateOf<Uri?>(null) }
 
-    // Audio Picker Launcher
+    // Audio Picker Launcher using OpenDocument
     val audioPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
+        contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri ->
             if (uri != null) {
                 // Must take persistable permissions so the background service can read it later
@@ -251,7 +251,8 @@ fun CreateAlarmSection(viewModel: AlarmManagerViewModel, onCreated: () -> Unit) 
             )
         } else if (audioType == "LOCAL_FILE") {
             Button(
-                onClick = { audioPicker.launch("audio/*") },
+                // Passing arrayOf("audio/*") as required by OpenDocument
+                onClick = { audioPicker.launch(arrayOf("audio/*")) },
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
             ) {

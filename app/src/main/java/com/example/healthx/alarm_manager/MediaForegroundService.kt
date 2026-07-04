@@ -10,18 +10,20 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.example.healthx.R
 import com.example.healthx.data.local.AppDatabase
 import com.example.healthx.data.local.entities.AlarmEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -37,9 +39,14 @@ class MediaForegroundService : Service(), TextToSpeech.OnInitListener {
     private lateinit var audioManager: AudioManager
     private var originalVolume: Int = -1
 
+    // TTS State Tracking
+    private var isTtsReady = false
+    private var ttsTextToLoop: String? = null
+    private var shouldLoopTts = true // Safety flag to kill loop on destroy
+
     companion object {
         const val CHANNEL_ID = "healthx_alarm_channel"
-        const val NOTIFICATION_ID = 9999 // Fixed ID so we only show one alarm at a time
+        const val NOTIFICATION_ID = 9999
     }
 
     override fun onCreate() {
@@ -52,30 +59,24 @@ class MediaForegroundService : Service(), TextToSpeech.OnInitListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val alarmId = intent?.getIntExtra("ALARM_ID", -1) ?: return START_NOT_STICKY
 
-        // 1. Acquire Wakelock & Wake Screen
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.FULL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
             "HealthX::AlarmWakeLock"
         )
-        wakeLock?.acquire(10 * 60 * 1000L /* 10 minutes max */)
+        wakeLock?.acquire(10 * 60 * 1000L)
 
-        // 2. Fetch Alarm Details
         serviceScope.launch {
             val db = AppDatabase.getDatabase(applicationContext)
             val alarm = db.alarmDao().getAlarmById(alarmId)
 
             if (alarm != null) {
-                // 3. Show Un-swipeable Notification
                 startForeground(NOTIFICATION_ID, buildNotification(alarm))
 
-                // 4. Override Volume
                 originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
-                // Assuming alarm.volumeLevel exists. Defaulting to max if not.
                 val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
                 audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
 
-                // 5. Play Audio
                 playAudio(alarm)
             } else {
                 stopSelf()
@@ -88,65 +89,108 @@ class MediaForegroundService : Service(), TextToSpeech.OnInitListener {
     private fun playAudio(alarm: AlarmEntity) {
         when (alarm.audioPlaybackType) {
             "LOCAL_FILE" -> playMediaPlayer(alarm.localAudioUri)
-            "CLOUD_MEDIA" -> {
-                playMediaPlayer(alarm.cloudMediaUrl)
-            }
+            "CLOUD_MEDIA" -> playMediaPlayer(alarm.cloudMediaUrl)
             "TTS" -> {
-                // FIX: Use elvis operator to handle the nullable Int result safely
-                val languageResult = tts?.isLanguageAvailable(Locale.US) ?: TextToSpeech.LANG_NOT_SUPPORTED
-
-                if (languageResult >= TextToSpeech.LANG_AVAILABLE) {
-                    tts?.speak(alarm.ttsContent ?: "Alarm triggering", TextToSpeech.QUEUE_FLUSH, null, "TTS_ID")
-                } else {
-                    playDefaultFallback()
+                ttsTextToLoop = alarm.ttsContent ?: "Alarm triggering"
+                if (isTtsReady) {
+                    startTtsLoop()
                 }
             }
             else -> playDefaultFallback()
         }
     }
 
-    private fun playMediaPlayer(uri: String?) {
+    private fun startTtsLoop() {
+        val text = ttsTextToLoop ?: return
+        if (!shouldLoopTts) return
+
+        // Use a Bundle to map the Utterance ID for the progress listener
+        val params = android.os.Bundle()
+        params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "TTS_ID")
+
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "TTS_ID")
+    }
+
+    private fun playMediaPlayer(uriString: String?) {
+        if (uriString.isNullOrBlank()) {
+            playDefaultFallback()
+            return
+        }
+
         try {
+            val uri = Uri.parse(uriString)
             mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
-                setDataSource(uri ?: throw Exception("URI is null"))
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                setDataSource(applicationContext, uri)
                 isLooping = true
                 prepareAsync()
                 setOnPreparedListener { it.start() }
-                setOnErrorListener { _, _, _ ->
+                setOnErrorListener { _, what, extra ->
+                    Log.e(TAG, "MediaPlayer error: $what, $extra")
                     playDefaultFallback()
                     true
                 }
             }
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to load media: ${e.message}")
             playDefaultFallback()
         }
     }
 
     private fun playDefaultFallback() {
         Log.e(TAG, "Playing default system fallback audio.")
-        // Play a raw resource file bundled with your app
-        // mediaPlayer = MediaPlayer.create(this, R.raw.default_alarm_sound)
-        // mediaPlayer?.isLooping = true
-        // mediaPlayer?.start()
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            val result = tts?.setLanguage(Locale.US)
+            if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                isTtsReady = true
+
+                // Attach the listener to handle the infinite loop
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onError(utteranceId: String?) {}
+
+                    override fun onDone(utteranceId: String?) {
+                        if (utteranceId == "TTS_ID" && shouldLoopTts) {
+                            // Wait 2 seconds before repeating so it sounds natural
+                            serviceScope.launch {
+                                delay(2000)
+                                if (shouldLoopTts) {
+                                    startTtsLoop()
+                                }
+                            }
+                        }
+                    }
+                })
+
+                // If an alarm triggered while TTS was booting up, play it now
+                if (ttsTextToLoop != null) {
+                    startTtsLoop()
+                }
+            }
+        }
     }
 
     private fun buildNotification(alarm: AlarmEntity): Notification {
-        // Stop Action
         val stopIntent = Intent(this, AlarmActionReceiver::class.java).apply {
             action = "ACTION_STOP"
             putExtra("ALARM_ID", alarm.id)
         }
         val stopPendingIntent = PendingIntent.getBroadcast(this, alarm.id, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        // Snooze Action
         val snoozeIntent = Intent(this, AlarmActionReceiver::class.java).apply {
             action = "ACTION_SNOOZE"
             putExtra("ALARM_ID", alarm.id)
         }
         val snoozePendingIntent = PendingIntent.getBroadcast(this, alarm.id + 1, snoozeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        // Empty Full Screen Intent to wake screen on locked devices
         val fullScreenIntent = Intent(this, AlarmReceiver::class.java)
         val fullScreenPendingIntent = PendingIntent.getActivity(this, 0, fullScreenIntent, PendingIntent.FLAG_IMMUTABLE)
 
@@ -156,8 +200,8 @@ class MediaForegroundService : Service(), TextToSpeech.OnInitListener {
             .setContentText(alarm.description)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setOngoing(true) // CRITICAL: Makes it un-swipeable
-            .setFullScreenIntent(fullScreenPendingIntent, true) // Wakes screen
+            .setOngoing(true)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
             .addAction(android.R.drawable.ic_media_pause, "Snooze (5m)", snoozePendingIntent)
             .addAction(android.R.drawable.ic_delete, "Stop", stopPendingIntent)
             .build()
@@ -178,25 +222,19 @@ class MediaForegroundService : Service(), TextToSpeech.OnInitListener {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Clean up locks and audio
+        shouldLoopTts = false // Immediately kill the loop flag
+
         mediaPlayer?.stop()
         mediaPlayer?.release()
+
         tts?.stop()
         tts?.shutdown()
 
-        // Restore user's original volume
         if (originalVolume != -1) {
             audioManager.setStreamVolume(AudioManager.STREAM_ALARM, originalVolume, 0)
         }
-
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
-        }
-    }
-
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            tts?.language = Locale.US
         }
     }
 
