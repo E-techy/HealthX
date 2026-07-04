@@ -68,7 +68,6 @@ fun HomeScreen(
                     drawerContainerColor = Color(0xFF1E1E1E),
                     modifier = Modifier.width(300.dp)
                 ) {
-                    // Passed the callback to open the QR Screen
                     DrawerHeader(
                         account = account,
                         subStatus = subStatus,
@@ -198,7 +197,6 @@ fun ShareProfileFullScreenDialog(account: SavedAccount, onClose: () -> Unit) {
     var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     LaunchedEffect(account) {
-        // USE THE NEW BUILDER HERE
         val payload = ProfileQRBuilder.buildShareProfilePayload(
             accountId = account.accountId,
             name = account.name,

@@ -1,5 +1,6 @@
 package com.example.healthx
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -20,15 +21,17 @@ import com.example.healthx.data.local.SessionManager
 import com.example.healthx.notification_manager.FcmTokenSyncManager
 import com.example.healthx.permissions_manager.PermissionManager
 import com.example.healthx.ui.screens.auth.AuthNavGraph
+import com.example.healthx.ui.screens.chat.ChatScreen
 import com.example.healthx.ui.screens.home.HomeScreen
 import com.example.healthx.ui.screens.launch.AccountSelectionScreen
 import com.example.healthx.ui.screens.launch.AccountSelectionViewModel
 import com.example.healthx.ui.screens.reminders.RemindersNavGraph
+import com.example.healthx.ui.screens.scanner.QRScannerScreen
+import com.example.healthx.ui.subscription.SubscriptionActivity
 import com.example.healthx.ui.theme.HealthXTheme
 import com.example.healthx.utils.LocalActiveAccount
 import com.google.firebase.FirebaseApp
 import kotlinx.coroutines.launch
-import com.example.healthx.ui.screens.scanner.QRScannerScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -74,7 +77,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // PATH 2: Main App - Now routes to HomeScreen first
+        // PATH 2: Main App
         if (activeAccount != null && !forceShowAuth) {
             CompositionLocalProvider(LocalActiveAccount provides activeAccount!!) {
                 val mainNavController = rememberNavController()
@@ -85,12 +88,20 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(
                             account = activeAccount!!,
                             hasMultipleAccounts = savedAccounts!!.size > 1,
-                            onNavigateToSettings = { /* TODO */ },
-                            onNavigateToApiKeys = { /* TODO */ },
-                            onNavigateToAiChat = { /* TODO */ },
+                            onNavigateToSettings = { /* TODO: Navigate to settings */ },
+                            onNavigateToApiKeys = { /* TODO: Navigate to api keys */ },
+
+                            // 1. Linked AI Chat
+                            onNavigateToAiChat = { mainNavController.navigate("ai_chat") },
+
                             onNavigateToReminders = { mainNavController.navigate("reminders") },
-                            onNavigateToScanner = { mainNavController.navigate("scanner") }, // Wired up!
-                            onNavigateToSubscriptions = { /* TODO */ },
+                            onNavigateToScanner = { mainNavController.navigate("scanner") },
+
+                            // 2. Linked Subscription (Fires Intent since it's an Activity)
+                            onNavigateToSubscriptions = {
+                                context.startActivity(Intent(context, SubscriptionActivity::class.java))
+                            },
+
                             onSwitchAccountRequested = {
                                 coroutineScope.launch {
                                     sessionManager.switchActiveAccount("")
@@ -108,10 +119,16 @@ class MainActivity : ComponentActivity() {
                         RemindersNavGraph()
                     }
 
-                    // Add the QR Scanner route here!
                     composable("scanner") {
                         QRScannerScreen(
-                            onCloseClicked = { mainNavController.popBackStack() } // Goes back to Home
+                            onCloseClicked = { mainNavController.popBackStack() }
+                        )
+                    }
+
+                    // 3. Added AI Chat Route
+                    composable("ai_chat") {
+                        ChatScreen(
+                            onNavigateToSettings = { /* TODO: Route to settings if API key is missing */ }
                         )
                     }
                 }
