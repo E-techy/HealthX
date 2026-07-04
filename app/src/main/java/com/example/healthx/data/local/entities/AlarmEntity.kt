@@ -28,6 +28,8 @@ data class AlarmEntity(
     val title: String,
     val description: String,
 
+    val volumeLevel: Int = 100,
+
     val isRecurring: Boolean = false,
     val recurrenceType: String?,
     val recurrenceInterval: Int?,
