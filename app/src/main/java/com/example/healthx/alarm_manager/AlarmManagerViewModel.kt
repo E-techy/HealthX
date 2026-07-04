@@ -2,6 +2,7 @@ package com.example.healthx.alarm_manager
 
 import android.app.Application
 import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.healthx.data.local.AppDatabase
@@ -54,7 +55,6 @@ class AlarmManagerViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun deleteAlarm(alarm: AlarmEntity) {
-        // If the alarm is ringing right now (or about to within 1 min), kill the service first
         val isRunning = alarm.status == "PENDING" && (alarm.triggerTimeMillis - System.currentTimeMillis() < 60_000)
         if (isRunning) {
             stopRunningAlarm(alarm.id)
@@ -71,6 +71,57 @@ class AlarmManagerViewModel(application: Application) : AndroidViewModel(applica
         viewModelScope.launch {
             alarmDao.updateAlarm(alarm)
             RollingScheduleEngine(getApplication()).updateOSAlarms()
+        }
+    }
+
+    /**
+     * Creates a new alarm and triggers the engine to schedule it with the OS.
+     */
+    fun createAlarm(
+        title: String,
+        description: String,
+        category: String,
+        triggerTimeMillis: Long,
+        audioType: String,
+        localUri: String?,
+        ttsContent: String?,
+        cloudUrl: String?
+    ) {
+        val newAlarm = AlarmEntity(
+            remoteId = null,
+            triggerTimeMillis = triggerTimeMillis,
+            category = category,
+            logoUrl = null, // Can map local drawables based on category later
+            audioPlaybackType = audioType,
+            localAudioUri = localUri,
+            ttsContent = ttsContent,
+            cloudMediaUrl = cloudUrl,
+            status = "PENDING",
+            title = title,
+            description = description,
+            isRecurring = false,
+            recurrenceType = null,
+            recurrenceInterval = null,
+            recurrenceStartDate = null,
+            recurrenceEndDate = null
+        )
+
+        viewModelScope.launch {
+            alarmDao.insertAlarm(newAlarm)
+            // Immediately wake the engine so the OS knows about this new alarm
+            RollingScheduleEngine(getApplication()).updateOSAlarms()
+        }
+    }
+
+    /**
+     * Secures persistent read access to a user-selected audio file.
+     */
+    fun takePersistableUriPermission(uri: Uri) {
+        try {
+            val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            getApplication<Application>().contentResolver.takePersistableUriPermission(uri, takeFlags)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 

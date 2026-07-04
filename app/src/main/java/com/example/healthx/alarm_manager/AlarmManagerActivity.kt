@@ -1,8 +1,11 @@
 package com.example.healthx.alarm_manager
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -13,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -39,7 +43,7 @@ class AlarmManagerActivity : ComponentActivity() {
             HealthXTheme {
                 AlarmManagerUI(
                     viewModel = viewModel,
-                    onBackClicked = { finish() } // Closes the Activity and goes back
+                    onBackClicked = { finish() }
                 )
             }
         }
@@ -59,6 +63,8 @@ fun AlarmManagerUI(
     val selectedCategory by viewModel.selectedCategoryFilter.collectAsState()
 
     var showAllActive by remember { mutableStateOf(false) }
+    var isCreateModeExpanded by remember { mutableStateOf(false) }
+
     val categories = remember(allAlarms) { allAlarms.map { it.category }.distinct() }
 
     Scaffold(
@@ -82,9 +88,40 @@ fun AlarmManagerUI(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // --- SECTION 1: ACTIVE / RUNNING ALARMS ---
+
+            // --- SECTION 0: CREATE ALARM (TESTING TOOL) ---
             item {
                 Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF192A40)),
+                    modifier = Modifier.fillMaxWidth().animateContentSize()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { isCreateModeExpanded = !isCreateModeExpanded },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AddAlarm, contentDescription = "Create", tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Create Test Alarm", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            }
+                            Icon(
+                                if (isCreateModeExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = "Toggle", tint = Color.White
+                            )
+                        }
+
+                        AnimatedVisibility(visible = isCreateModeExpanded) {
+                            CreateAlarmSection(viewModel = viewModel, onCreated = { isCreateModeExpanded = false })
+                        }
+                    }
+                }
+            }
+
+            // --- SECTION 1: ACTIVE / RUNNING ALARMS ---
+            item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -145,12 +182,111 @@ fun AlarmManagerUI(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CreateAlarmSection(viewModel: AlarmManagerViewModel, onCreated: () -> Unit) {
+    var title by remember { mutableStateOf("Test Alarm") }
+    var description by remember { mutableStateOf("Testing the engine") }
+    var category by remember { mutableStateOf("MEDICAL") }
+    var minutesFromNow by remember { mutableFloatStateOf(1f) } // Default 1 min for fast testing
+
+    var audioType by remember { mutableStateOf("TTS") } // Default to TTS
+    var ttsContent by remember { mutableStateOf("Please take your medication.") }
+    var localAudioUri by remember { mutableStateOf<Uri?>(null) }
+
+    // Audio Picker Launcher
+    val audioPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri ->
+            if (uri != null) {
+                // Must take persistable permissions so the background service can read it later
+                viewModel.takePersistableUriPermission(uri)
+                localAudioUri = uri
+                audioType = "LOCAL_FILE"
+            }
+        }
+    )
+
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+        OutlinedTextField(
+            value = title, onValueChange = { title = it },
+            label = { Text("Title") }, modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = description, onValueChange = { description = it },
+            label = { Text("Description") }, modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = category, onValueChange = { category = it },
+            label = { Text("Category (e.g. FOOD, PILLS)") }, modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Trigger in: ${minutesFromNow.toInt()} minutes", color = Color.White)
+        Slider(
+            value = minutesFromNow,
+            onValueChange = { minutesFromNow = it },
+            valueRange = 1f..60f,
+            steps = 59
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Audio Source", color = Color.White)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            FilterChip(selected = audioType == "TTS", onClick = { audioType = "TTS" }, label = { Text("TTS") })
+            FilterChip(selected = audioType == "LOCAL_FILE", onClick = { audioType = "LOCAL_FILE" }, label = { Text("Local MP3") })
+            FilterChip(selected = audioType == "DEFAULT", onClick = { audioType = "DEFAULT" }, label = { Text("System Default") })
+        }
+
+        if (audioType == "TTS") {
+            OutlinedTextField(
+                value = ttsContent, onValueChange = { ttsContent = it },
+                label = { Text("Text to Speech Content") }, modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+            )
+        } else if (audioType == "LOCAL_FILE") {
+            Button(
+                onClick = { audioPicker.launch("audio/*") },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+            ) {
+                Text(if (localAudioUri == null) "Select Audio File" else "File Selected: ${localAudioUri?.lastPathSegment}")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
+            onClick = {
+                val triggerTime = System.currentTimeMillis() + (minutesFromNow.toInt() * 60 * 1000L)
+                viewModel.createAlarm(
+                    title = title,
+                    description = description,
+                    category = category,
+                    triggerTimeMillis = triggerTime,
+                    audioType = audioType,
+                    localUri = localAudioUri?.toString(),
+                    ttsContent = if (audioType == "TTS") ttsContent else null,
+                    cloudUrl = null
+                )
+                onCreated()
+            },
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+        ) {
+            Text("Save & Schedule", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
 @Composable
 fun AlarmItemCard(alarm: AlarmEntity, viewModel: AlarmManagerViewModel) {
     var cardState by remember { mutableStateOf(CardState.COLLAPSED) }
     var currentVolume by remember { mutableFloatStateOf(1.0f) }
 
-    // DANGER CHECK: Is this alarm triggering right now, or within the next 60 seconds?
     val isCurrentlyRunning = alarm.status == "PENDING" && (alarm.triggerTimeMillis - System.currentTimeMillis() < 60_000)
 
     Card(
@@ -202,18 +338,15 @@ fun AlarmItemCard(alarm: AlarmEntity, viewModel: AlarmManagerViewModel) {
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        // Quick Delete (Always allowed, kills the service if running)
                         IconButton(onClick = { viewModel.deleteAlarm(alarm) }) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFE53935))
                         }
 
                         if (!isCurrentlyRunning) {
-                            // Sync
                             IconButton(onClick = { viewModel.syncAlarmWithCloud(alarm.id) }) {
                                 Icon(Icons.Default.CloudSync, contentDescription = "Sync", tint = Color.Cyan)
                             }
                         } else {
-                            // Stop Running Alarm
                             IconButton(onClick = { viewModel.stopRunningAlarm(alarm.id) }) {
                                 Icon(Icons.Default.StopCircle, contentDescription = "Stop Alarm", tint = Color.Yellow)
                             }
@@ -232,7 +365,6 @@ fun AlarmItemCard(alarm: AlarmEntity, viewModel: AlarmManagerViewModel) {
                     Spacer(modifier = Modifier.height(8.dp))
 
                     if (isCurrentlyRunning) {
-                        // LOCKOUT WARNING FOR RUNNING ALARMS
                         Surface(
                             color = Color(0xFF3E1E1E),
                             shape = RoundedCornerShape(8.dp),
@@ -245,7 +377,6 @@ fun AlarmItemCard(alarm: AlarmEntity, viewModel: AlarmManagerViewModel) {
                             }
                         }
                     } else {
-                        // NORMAL EDIT CONTROLS
                         Text("Alarm Volume: ${(currentVolume * 100).toInt()}%", color = Color.Gray)
                         Slider(
                             value = currentVolume,
