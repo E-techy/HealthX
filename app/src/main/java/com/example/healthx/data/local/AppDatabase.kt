@@ -12,14 +12,16 @@ import com.example.healthx.notification_manager.NotificationDao
 import com.example.healthx.notification_manager.NotificationEntity
 import com.example.healthx.data.local.dao.AlarmDao
 import com.example.healthx.data.local.entities.AlarmEntity
+import com.example.healthx.data.local.entities.ActiveAlarmLedger
 
 @Database(
     entities = [
         ReminderEntity::class,
         NotificationEntity::class,
-        AlarmEntity::class           // ADDED: The new Alarm table
+        AlarmEntity::class,
+        ActiveAlarmLedger::class     // ADDED: The new Ledger table
     ],
-    version = 3,                     // ADDED: Bumped version from 2 to 3
+    version = 4,                     // ADDED: Bumped version from 3 to 4
     exportSchema = false
 )
 @TypeConverters(ReminderTypeConverters::class)
@@ -27,7 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun reminderDao(): ReminderDao
     abstract fun notificationDao(): NotificationDao
-    abstract fun alarmDao(): AlarmDao  // ADDED: Expose the Alarm DAO
+    abstract fun alarmDao(): AlarmDao
 
     companion object {
         @Volatile
@@ -40,7 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "healthx_database"
                 )
-                    .fallbackToDestructiveMigration() // Wipes data on version bump during dev
+                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance
