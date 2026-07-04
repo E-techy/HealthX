@@ -131,4 +131,5 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation("com.razorpay:checkout:1.6.38")
+    implementation("com.google.zxing:core:3.5.2")
 }
