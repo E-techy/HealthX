@@ -27,9 +27,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.healthx.data.local.SavedAccount
+import com.example.healthx.qr_codes.ProfileQRBuilder
 import com.example.healthx.utils.QRGenerator
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 import kotlin.math.absoluteValue
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -191,19 +191,19 @@ fun HomeScreen(
     }
 }
 
-// --- NEW FULL SCREEN QR DIALOG ---
+// --- FULL SCREEN QR DIALOG ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareProfileFullScreenDialog(account: SavedAccount, onClose: () -> Unit) {
     var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     LaunchedEffect(account) {
-        // Construct the JSON payload for the QR code
-        val payload = JSONObject().apply {
-            put("accountId", account.accountId)
-            put("name", account.name)
-            put("email", account.email)
-        }.toString()
+        // USE THE NEW BUILDER HERE
+        val payload = ProfileQRBuilder.buildShareProfilePayload(
+            accountId = account.accountId,
+            name = account.name,
+            email = account.email
+        )
 
         // Generate the QR code
         qrBitmap = QRGenerator.generateQRCode(data = payload, size = 600)
