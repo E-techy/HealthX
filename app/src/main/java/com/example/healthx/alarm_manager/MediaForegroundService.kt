@@ -89,12 +89,13 @@ class MediaForegroundService : Service(), TextToSpeech.OnInitListener {
         when (alarm.audioPlaybackType) {
             "LOCAL_FILE" -> playMediaPlayer(alarm.localAudioUri)
             "CLOUD_MEDIA" -> {
-                // Logic to stream from cloudMediaUrl.
-                // If it fails, fallback to default.
-                playMediaPlayer(alarm.cloudMediaUrl) // MediaPlayer can handle HTTP URLs natively
+                playMediaPlayer(alarm.cloudMediaUrl)
             }
             "TTS" -> {
-                if (tts?.isLanguageAvailable(Locale.US) >= TextToSpeech.LANG_AVAILABLE) {
+                // FIX: Use elvis operator to handle the nullable Int result safely
+                val languageResult = tts?.isLanguageAvailable(Locale.US) ?: TextToSpeech.LANG_NOT_SUPPORTED
+
+                if (languageResult >= TextToSpeech.LANG_AVAILABLE) {
                     tts?.speak(alarm.ttsContent ?: "Alarm triggering", TextToSpeech.QUEUE_FLUSH, null, "TTS_ID")
                 } else {
                     playDefaultFallback()

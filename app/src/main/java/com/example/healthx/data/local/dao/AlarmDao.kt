@@ -26,7 +26,6 @@ interface AlarmDao {
     @Query("UPDATE alarms SET status = :newStatus WHERE id = :alarmId")
     suspend fun updateAlarmStatus(alarmId: Int, newStatus: String)
 
-    // FIX: Added missing snooze state updater
     @Query("UPDATE alarms SET isSnoozed = :isSnoozed WHERE id = :alarmId")
     suspend fun updateSnoozeState(alarmId: Int, isSnoozed: Boolean)
 
@@ -39,12 +38,16 @@ interface AlarmDao {
     @Query("DELETE FROM alarms WHERE status = 'CANCELLED'")
     suspend fun cleanupCancelledAlarms()
 
-    // FIX: Added missing fetchers
     @Query("SELECT * FROM alarms WHERE id = :alarmId LIMIT 1")
     suspend fun getAlarmById(alarmId: Int): AlarmEntity?
 
     @Query("SELECT * FROM alarms WHERE remoteId = :remoteId LIMIT 1")
     suspend fun getAlarmByRemoteId(remoteId: String): AlarmEntity?
+
+    // --- MISSING FLOW ADDED HERE ---
+    // UI Flow: Observe all active alarms for the Command Center screen
+    @Query("SELECT * FROM alarms WHERE status = 'PENDING' ORDER BY triggerTimeMillis ASC")
+    fun getPendingAlarmsFlow(): Flow<List<AlarmEntity>>
 
     // --- DYNAMIC ROLLING SCHEDULE QUERY ---
     @Query("""
