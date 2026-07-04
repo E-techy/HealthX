@@ -1,10 +1,12 @@
 package com.example.healthx.ui.screens.home
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -15,14 +17,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.healthx.data.local.SavedAccount
+import com.example.healthx.utils.QRGenerator
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import kotlin.math.absoluteValue
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +52,9 @@ fun HomeScreen(
 
     val subStatus by viewModel.subscriptionStatus.collectAsState()
 
+    // State to control the visibility of the Share QR Screen
+    var showQrDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(account) {
         viewModel.fetchSubscriptionStatus(account)
     }
@@ -58,7 +68,15 @@ fun HomeScreen(
                     drawerContainerColor = Color(0xFF1E1E1E),
                     modifier = Modifier.width(300.dp)
                 ) {
-                    DrawerHeader(account = account, subStatus = subStatus)
+                    // Passed the callback to open the QR Screen
+                    DrawerHeader(
+                        account = account,
+                        subStatus = subStatus,
+                        onShowQrClicked = {
+                            coroutineScope.launch { drawerState.close() }
+                            showQrDialog = true
+                        }
+                    )
 
                     Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
 
@@ -114,11 +132,9 @@ fun HomeScreen(
             }
         ) {
             Scaffold(
-                // Set to transparent so the animated wave shows through
                 containerColor = Color.Transparent,
                 topBar = {
                     TopAppBar(
-                        // Changed to display the user's name
                         title = { Text(account.name, color = Color.White, fontWeight = FontWeight.Bold) },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xBB121212)),
                         navigationIcon = {
@@ -128,7 +144,6 @@ fun HomeScreen(
                         }
                     )
                 },
-                // Sticky center-bottom button for the Scanner
                 floatingActionButtonPosition = FabPosition.Center,
                 floatingActionButton = {
                     FloatingActionButton(
@@ -166,6 +181,119 @@ fun HomeScreen(
             }
         }
     }
+
+    // The Full Screen Overlay for Sharing the Profile
+    if (showQrDialog) {
+        ShareProfileFullScreenDialog(
+            account = account,
+            onClose = { showQrDialog = false }
+        )
+    }
+}
+
+// --- NEW FULL SCREEN QR DIALOG ---
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ShareProfileFullScreenDialog(account: SavedAccount, onClose: () -> Unit) {
+    var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    LaunchedEffect(account) {
+        // Construct the JSON payload for the QR code
+        val payload = JSONObject().apply {
+            put("accountId", account.accountId)
+            put("name", account.name)
+            put("email", account.email)
+        }.toString()
+
+        // Generate the QR code
+        qrBitmap = QRGenerator.generateQRCode(data = payload, size = 600)
+    }
+
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false, // Makes the dialog full-screen
+            dismissOnBackPress = true
+        )
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Share Profile", color = Color.White) },
+                    navigationIcon = {
+                        IconButton(onClick = onClose) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF121212))
+                )
+            },
+            containerColor = Color.Black
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Scan to Connect",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // White card background for the QR code to ensure scannability
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(8.dp),
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    if (qrBitmap != null) {
+                        Image(
+                            bitmap = qrBitmap!!.asImageBitmap(),
+                            contentDescription = "Profile QR Code",
+                            modifier = Modifier
+                                .size(250.dp)
+                                .padding(16.dp)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(250.dp)
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Displaying the Account ID Text
+                Text("Or add manually using User ID:", color = Color.Gray, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Surface(
+                    color = Color(0xFF1E1E1E),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = account.accountId,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+                    )
+                }
+            }
+        }
+    }
 }
 
 // --- ANIMATED BACKGROUND ---
@@ -181,7 +309,6 @@ fun AnimatedWaveBackground(content: @Composable () -> Unit) {
         )
     )
 
-    // Cinematic dark/purple/blue cosmic wave
     val brush = Brush.linearGradient(
         colors = listOf(
             Color(0xFF0A0A14),
@@ -203,14 +330,31 @@ fun AnimatedWaveBackground(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun DrawerHeader(account: SavedAccount, subStatus: String) {
+fun DrawerHeader(account: SavedAccount, subStatus: String, onShowQrClicked: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(24.dp),
         horizontalAlignment = Alignment.Start
     ) {
-        ProfileIcon(account = account, size = 64)
+        // Row to align the profile icon and the QR code button side by side
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            ProfileIcon(account = account, size = 64)
+
+            // The new QR Share button
+            IconButton(
+                onClick = onShowQrClicked,
+                modifier = Modifier
+                    .background(Color(0xFF2C2C2C), CircleShape)
+                    .size(48.dp)
+            ) {
+                Icon(Icons.Default.QrCode, contentDescription = "Share Profile", tint = Color.White)
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
