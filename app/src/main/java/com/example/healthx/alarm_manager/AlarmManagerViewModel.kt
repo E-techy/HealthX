@@ -18,13 +18,10 @@ class AlarmManagerViewModel(application: Application) : AndroidViewModel(applica
     private val db = AppDatabase.getDatabase(application)
     private val alarmDao = db.alarmDao()
 
-    // --- STATE FLOWS ---
-
     val activeAlarms: StateFlow<List<AlarmEntity>> = alarmDao.getPendingAlarmsFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private val _allAlarms = MutableStateFlow<List<AlarmEntity>>(emptyList())
-
     private val _selectedCategoryFilter = MutableStateFlow<String?>(null)
     val selectedCategoryFilter = _selectedCategoryFilter.asStateFlow()
 
@@ -34,13 +31,9 @@ class AlarmManagerViewModel(application: Application) : AndroidViewModel(applica
 
     init {
         viewModelScope.launch {
-            activeAlarms.collect { pending ->
-                _allAlarms.value = pending
-            }
+            activeAlarms.collect { pending -> _allAlarms.value = pending }
         }
     }
-
-    // --- ACTIONS ---
 
     fun setCategoryFilter(category: String?) {
         _selectedCategoryFilter.value = if (_selectedCategoryFilter.value == category) null else category
@@ -56,9 +49,7 @@ class AlarmManagerViewModel(application: Application) : AndroidViewModel(applica
 
     fun deleteAlarm(alarm: AlarmEntity) {
         val isRunning = alarm.status == "PENDING" && (alarm.triggerTimeMillis - System.currentTimeMillis() < 60_000)
-        if (isRunning) {
-            stopRunningAlarm(alarm.id)
-        }
+        if (isRunning) stopRunningAlarm(alarm.id)
 
         viewModelScope.launch {
             alarmDao.deleteAlarm(alarm)
@@ -75,23 +66,27 @@ class AlarmManagerViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * Creates a new alarm and triggers the engine to schedule it with the OS.
+     * Translates the UI selections into the DB entity and kicks the OS engine.
      */
     fun createAlarm(
         title: String,
         description: String,
         category: String,
-        triggerTimeMillis: Long,
+        triggerTimeMillis: Long, // Computed from Calendar+Time dials in the UI
+        volumeLevel: Float,      // 0.0 to 1.0
         audioType: String,
         localUri: String?,
         ttsContent: String?,
-        cloudUrl: String?
+        cloudUrl: String?,
+        isRecurring: Boolean,
+        recurrenceType: String?,
+        recurrenceInterval: Int?
     ) {
         val newAlarm = AlarmEntity(
             remoteId = null,
             triggerTimeMillis = triggerTimeMillis,
             category = category,
-            logoUrl = null, // Can map local drawables based on category later
+            logoUrl = null,
             audioPlaybackType = audioType,
             localAudioUri = localUri,
             ttsContent = ttsContent,
@@ -99,43 +94,28 @@ class AlarmManagerViewModel(application: Application) : AndroidViewModel(applica
             status = "PENDING",
             title = title,
             description = description,
-            isRecurring = false,
-            recurrenceType = null,
-            recurrenceInterval = null,
-            recurrenceStartDate = null,
+            isRecurring = isRecurring,
+            recurrenceType = recurrenceType,
+            recurrenceInterval = recurrenceInterval,
+            recurrenceStartDate = if (isRecurring) triggerTimeMillis else null,
             recurrenceEndDate = null
         )
 
         viewModelScope.launch {
             alarmDao.insertAlarm(newAlarm)
-            // Immediately wake the engine so the OS knows about this new alarm
             RollingScheduleEngine(getApplication()).updateOSAlarms()
         }
     }
 
-    /**
-     * Secures persistent read access to a user-selected audio file.
-     */
     fun takePersistableUriPermission(uri: Uri) {
         try {
             val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION
             getApplication<Application>().contentResolver.takePersistableUriPermission(uri, takeFlags)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
-    // --- FAKE SERVER APIs ---
-
-    fun syncAlarmWithCloud(alarmId: Int) {
-        viewModelScope.launch { delay(1500) }
-    }
-
-    fun downloadCloudMediaForAlarm(cloudUrl: String) {
-        viewModelScope.launch { delay(2000) }
-    }
-
-    // --- UTILS ---
+    fun syncAlarmWithCloud(alarmId: Int) { viewModelScope.launch { delay(1500) } }
+    fun downloadCloudMediaForAlarm(cloudUrl: String) { viewModelScope.launch { delay(2000) } }
 
     fun formatTriggerTime(timeMillis: Long): String {
         val formatter = SimpleDateFormat("EEE, MMM dd • hh:mm a", Locale.getDefault())
