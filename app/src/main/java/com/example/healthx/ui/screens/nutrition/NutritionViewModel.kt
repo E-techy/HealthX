@@ -1,9 +1,12 @@
 package com.example.healthx.ui.screens.nutrition
 
+import android.app.Application
 import android.content.Context
 import android.net.Uri
-import androidx.lifecycle.ViewModel
+import android.util.Log
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.healthx.data.local.SessionManager
 import com.example.healthx.data.models.*
 import com.example.healthx.data.network.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,8 +16,13 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import retrofit2.HttpException
 import java.io.File
 import java.io.FileOutputStream
+
+// Tag for Logcat
+private const val TAG = "NutritionViewModel"
 
 sealed class NutritionState {
     object Loading : NutritionState()
@@ -23,39 +31,69 @@ sealed class NutritionState {
     data class Error(val message: String) : NutritionState()
 }
 
-class NutritionViewModel : ViewModel() {
+class NutritionViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow<NutritionState>(NutritionState.Loading)
     val uiState = _uiState.asStateFlow()
 
-    // TODO: Inject your Auth Manager to get the real JWT token
-    private val jwtToken = "Bearer YOUR_JWT_TOKEN_HERE"
+    private val sessionManager = SessionManager(application)
+    private var jwtToken: String = ""
 
     init {
-        fetchDashboard()
+        Log.d(TAG, "ViewModel initialized. Collecting session data...")
+        viewModelScope.launch {
+            sessionManager.activeAccountFlow.collect { account ->
+                if (account != null) {
+                    jwtToken = "Bearer ${account.token}"
+                    Log.d(TAG, "Session found. Token loaded. Fetching dashboard.")
+                    fetchDashboard()
+                } else {
+                    Log.e(TAG, "No active session found. Emitting Auth Error.")
+                    _uiState.value = NutritionState.Error("Authentication Error. Please log in again.")
+                }
+            }
+        }
     }
 
     fun fetchDashboard() {
+        if (jwtToken.isEmpty()) {
+            Log.w(TAG, "fetchDashboard aborted: jwtToken is empty.")
+            return
+        }
+
         viewModelScope.launch {
+            Log.d(TAG, "--> GET /api/nutrition/today")
             _uiState.value = NutritionState.Loading
             try {
                 val response = RetrofitClient.nutritionApi.getTodayDashboard(jwtToken)
                 if (response.success) {
+                    Log.d(TAG, "<-- Dashboard fetched successfully: ${response.summary}")
                     _uiState.value = NutritionState.Dashboard(response.summary)
                 } else {
-                    _uiState.value = NutritionState.Error("Failed to load dashboard")
+                    Log.e(TAG, "<-- Server returned success=false without HTTP error.")
+                    _uiState.value = NutritionState.Error("Failed to load dashboard data.")
                 }
             } catch (e: Exception) {
-                _uiState.value = NutritionState.Error(e.message ?: "Network error")
+                val errorMsg = parseErrorMessage(e)
+                Log.e(TAG, "fetchDashboard failed: $errorMsg", e)
+                _uiState.value = NutritionState.Error(errorMsg)
             }
         }
     }
 
     fun analyzeImage(context: Context, uri: Uri, portionSize: Int) {
+        if (jwtToken.isEmpty()) {
+            Log.w(TAG, "analyzeImage aborted: jwtToken is empty.")
+            return
+        }
+
         viewModelScope.launch {
+            Log.d(TAG, "--> POST /api/nutrition/ai/analyze | Portion: $portionSize")
             _uiState.value = NutritionState.Loading
             try {
                 val file = getFileFromUri(context, uri)
+                Log.d(TAG, "Image file prepared: ${file.name} (${file.length()} bytes)")
+
                 val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
                 val imagePart = MultipartBody.Part.createFormData("image", file.name, requestFile)
                 val portionBody = portionSize.toString().toRequestBody("text/plain".toMediaTypeOrNull())
@@ -63,18 +101,25 @@ class NutritionViewModel : ViewModel() {
                 val response = RetrofitClient.nutritionApi.analyzeFoodImage(jwtToken, imagePart, portionBody)
 
                 if (response.success) {
+                    Log.d(TAG, "<-- AI Analysis Successful: ${response.data.foodDetected}")
                     _uiState.value = NutritionState.AiReview(response.data)
                 } else {
+                    Log.e(TAG, "<-- AI Analysis returned success=false")
                     _uiState.value = NutritionState.Error("AI Analysis failed")
                 }
             } catch (e: Exception) {
-                _uiState.value = NutritionState.Error(e.message ?: "Analysis error")
+                val errorMsg = parseErrorMessage(e)
+                Log.e(TAG, "analyzeImage failed: $errorMsg", e)
+                _uiState.value = NutritionState.Error(errorMsg)
             }
         }
     }
 
     fun consumeAndTrackMeal(data: AiFoodData) {
+        if (jwtToken.isEmpty()) return
+
         viewModelScope.launch {
+            Log.d(TAG, "--> POST /api/nutrition/ai/save | Food: ${data.foodDetected}")
             _uiState.value = NutritionState.Loading
             try {
                 val request = SaveAiMealRequest(
@@ -89,15 +134,22 @@ class NutritionViewModel : ViewModel() {
 
                 val response = RetrofitClient.nutritionApi.saveAiMeal(jwtToken, request)
                 if (response.success) {
-                    fetchDashboard() // Sync complete, reload the dashboard
+                    Log.d(TAG, "<-- Meal saved successfully. Reloading dashboard.")
+                    fetchDashboard()
+                } else {
+                    Log.e(TAG, "<-- Meal save returned success=false")
+                    _uiState.value = NutritionState.Error("Failed to save meal data.")
                 }
             } catch (e: Exception) {
-                _uiState.value = NutritionState.Error(e.message ?: "Failed to save meal")
+                val errorMsg = parseErrorMessage(e)
+                Log.e(TAG, "consumeAndTrackMeal failed: $errorMsg", e)
+                _uiState.value = NutritionState.Error(errorMsg)
             }
         }
     }
 
     fun cancelAiReview() {
+        Log.d(TAG, "User cancelled AI review. Reloading dashboard.")
         fetchDashboard()
     }
 
@@ -107,5 +159,28 @@ class NutritionViewModel : ViewModel() {
         val outputStream = FileOutputStream(tempFile)
         inputStream?.copyTo(outputStream)
         return tempFile
+    }
+
+    // ==========================================
+    // THE MAGIC ERROR PARSER YOU NEEDED
+    // ==========================================
+    private fun parseErrorMessage(e: Exception): String {
+        if (e is HttpException) {
+            try {
+                val errorBodyString = e.response()?.errorBody()?.string()
+                if (!errorBodyString.isNullOrEmpty()) {
+                    val jsonObject = JSONObject(errorBodyString)
+                    // Look for the "message" key sent by the Node server
+                    if (jsonObject.has("message")) {
+                        return jsonObject.getString("message")
+                    }
+                }
+            } catch (parseException: Exception) {
+                Log.e(TAG, "Failed to parse error body JSON", parseException)
+            }
+            // Fallback if we couldn't parse the JSON
+            return "Server Error: ${e.code()}"
+        }
+        return e.message ?: "An unexpected network error occurred."
     }
 }

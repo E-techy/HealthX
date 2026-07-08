@@ -43,7 +43,7 @@ fun HomeScreen(
     onNavigateToAlarmManager: () -> Unit,
     onNavigateToScanner: () -> Unit,
     onNavigateToSubscriptions: () -> Unit,
-    onNavigateToNutrition: () -> Unit, // ADDED HERE
+    onNavigateToNutrition: () -> Unit,
     onSwitchAccountRequested: () -> Unit,
     onLogoutRequested: () -> Unit
 ) {
@@ -53,7 +53,6 @@ fun HomeScreen(
     val viewModel: HomeViewModel = viewModel()
     val subStatus by viewModel.subscriptionStatus.collectAsState()
 
-    // 1. Initialize the Alarm Manager ViewModel to fetch active alarms for the dashboard
     val alarmViewModel: AlarmManagerViewModel = viewModel()
     val activeAlarms by alarmViewModel.activeAlarms.collectAsState()
 
@@ -78,17 +77,27 @@ fun HomeScreen(
                     onNavigateToAlarmManager = onNavigateToAlarmManager,
                     onNavigateToScanner = onNavigateToScanner,
                     onNavigateToSubscriptions = onNavigateToSubscriptions,
-                    onNavigateToNutrition = onNavigateToNutrition, // FIXED HERE
-                    onSwitchAccountRequested = onSwitchAccountRequested,
-                    onLogoutRequested = onLogoutRequested
+                    onNavigateToNutrition = onNavigateToNutrition,
+
+                    // WIRED TO VIEWMODEL FOR INSTANT SESSION CLEARING
+                    onSwitchAccountRequested = {
+                        viewModel.switchAccount {
+                            onSwitchAccountRequested()
+                        }
+                    },
+                    onLogoutRequested = {
+                        viewModel.logout(account.accountId) {
+                            onLogoutRequested()
+                        }
+                    }
                 )
             }
         ) {
             Scaffold(
-                containerColor = Color.Transparent, // Let the cosmic wave shine through
+                containerColor = Color.Transparent,
                 topBar = {
                     TopAppBar(
-                        title = {}, // Empty title, greeting handles it
+                        title = {},
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                         navigationIcon = {
                             IconButton(
@@ -104,7 +113,7 @@ fun HomeScreen(
                 floatingActionButton = {
                     FloatingActionButton(
                         onClick = onNavigateToScanner,
-                        containerColor = Color(0xFF1E88E5), // Vivid Blue
+                        containerColor = Color(0xFF1E88E5),
                         contentColor = Color.White,
                         shape = CircleShape,
                         modifier = Modifier.size(64.dp)
@@ -117,9 +126,8 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
-                    contentPadding = PaddingValues(bottom = 100.dp) // Space for the FAB
+                    contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
-                    // --- GREETING ---
                     item {
                         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
                             Text(
@@ -137,7 +145,6 @@ fun HomeScreen(
                         }
                     }
 
-                    // --- 1. HEALTH STATS GRID ---
                     item {
                         HealthStatsGrid(
                             onHeartRateClick = { /* TODO: Route */ },
@@ -148,15 +155,13 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(32.dp))
                     }
 
-                    // --- 2. NUTRITION GOALS ---
                     item {
                         HomeNutritionSection(
-                            onNutritionClick = { onNavigateToNutrition() } // WIRED IT HERE AS WELL
+                            onNutritionClick = { onNavigateToNutrition() }
                         )
                         Spacer(modifier = Modifier.height(32.dp))
                     }
 
-                    // --- 3. UPCOMING ALARMS ---
                     item {
                         HomeUpcomingAlarms(
                             activeAlarms = activeAlarms,
@@ -165,7 +170,6 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(32.dp))
                     }
 
-                    // --- 4. MEETINGS & CONSULTATIONS ---
                     item {
                         HomeMeetings(
                             onMeetingsClick = { /* TODO: Navigate to video calls screen */ }
@@ -182,7 +186,6 @@ fun HomeScreen(
     }
 }
 
-// --- FULL SCREEN QR DIALOG ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareProfileFullScreenDialog(account: SavedAccount, onClose: () -> Unit) {
@@ -194,14 +197,13 @@ fun ShareProfileFullScreenDialog(account: SavedAccount, onClose: () -> Unit) {
             name = account.name,
             email = account.email
         )
-        // Generate the QR code
         qrBitmap = QRGenerator.generateQRCode(data = payload, size = 600)
     }
 
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(
-            usePlatformDefaultWidth = false, // Makes the dialog full-screen
+            usePlatformDefaultWidth = false,
             dismissOnBackPress = true
         )
     ) {
@@ -282,7 +284,6 @@ fun ShareProfileFullScreenDialog(account: SavedAccount, onClose: () -> Unit) {
     }
 }
 
-// Background Animator for the Cosmic Cinematic Feel
 @Composable
 fun AnimatedWaveBackground(content: @Composable () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition()
@@ -297,9 +298,9 @@ fun AnimatedWaveBackground(content: @Composable () -> Unit) {
 
     val brush = Brush.linearGradient(
         colors = listOf(
-            Color(0xFF0A0A12), // Deep Space
-            Color(0xFF1A1A2E), // Dark Purple tint
-            Color(0xFF0F1A24), // Dark Blue tint
+            Color(0xFF0A0A12),
+            Color(0xFF1A1A2E),
+            Color(0xFF0F1A24),
             Color(0xFF0A0A12)
         ),
         start = Offset(offset, offset / 2),

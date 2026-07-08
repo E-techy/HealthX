@@ -35,7 +35,7 @@ fun HomeDrawerContent(
     onNavigateToReminders: () -> Unit,
     onNavigateToAlarmManager: () -> Unit,
     onNavigateToScanner: () -> Unit,
-    onNavigateToNutrition: () -> Unit, // ADDED NUTRITION NAVIGATION
+    onNavigateToNutrition: () -> Unit,
     onNavigateToSubscriptions: () -> Unit,
     onSwitchAccountRequested: () -> Unit,
     onLogoutRequested: () -> Unit
@@ -43,7 +43,7 @@ fun HomeDrawerContent(
     val coroutineScope = rememberCoroutineScope()
 
     ModalDrawerSheet(
-        drawerContainerColor = Color(0xFF141414), // Deep cinematic black
+        drawerContainerColor = Color(0xFF141414),
         modifier = Modifier.width(320.dp)
     ) {
         DrawerHeader(
@@ -80,7 +80,6 @@ fun HomeDrawerContent(
             DrawerItem(icon = Icons.Default.QrCodeScanner, label = "Scanner") {
                 coroutineScope.launch { drawerState.close() }; onNavigateToScanner()
             }
-            // ADDED NUTRITION DRAWER ITEM HERE
             DrawerItem(icon = Icons.Default.Restaurant, label = "Nutrition") {
                 coroutineScope.launch { drawerState.close() }; onNavigateToNutrition()
             }
@@ -88,10 +87,9 @@ fun HomeDrawerContent(
                 coroutineScope.launch { drawerState.close() }; onNavigateToSubscriptions()
             }
 
-            if (hasMultipleAccounts) {
-                DrawerItem(icon = Icons.Default.SwitchAccount, label = "Switch Accounts") {
-                    coroutineScope.launch { drawerState.close() }; onSwitchAccountRequested()
-                }
+            // REMOVED THE IF STATEMENT - ALWAYS SHOW THIS BUTTON NOW
+            DrawerItem(icon = Icons.Default.SwitchAccount, label = "Add / Switch Account") {
+                coroutineScope.launch { drawerState.close() }; onSwitchAccountRequested()
             }
         }
 
