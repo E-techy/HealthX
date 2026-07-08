@@ -20,6 +20,9 @@ import org.json.JSONObject
 import retrofit2.HttpException
 import java.io.File
 import java.io.FileOutputStream
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.io.ByteArrayOutputStream
 
 // Tag for Logcat
 private const val TAG = "NutritionViewModel"
@@ -157,7 +160,25 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         val inputStream = context.contentResolver.openInputStream(uri)
         val tempFile = File(context.cacheDir, "scan_${System.currentTimeMillis()}.jpg")
         val outputStream = FileOutputStream(tempFile)
-        inputStream?.copyTo(outputStream)
+
+        try {
+            // Decode the image stream into a Bitmap
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+
+            // Compress the bitmap directly to the output stream as a JPEG at 70% quality
+            // This will turn a 5MB image into a ~500KB image without losing AI-readable detail
+            bitmap?.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+        } catch (e: Exception) {
+            Log.e(TAG, "Image compression failed, falling back to raw copy", e)
+            // Fallback just in case
+            inputStream?.copyTo(outputStream)
+        } finally {
+            inputStream?.close()
+            outputStream.flush()
+            outputStream.close()
+        }
+
+        Log.d(TAG, "Compressed file size: ${tempFile.length() / 1024} KB")
         return tempFile
     }
 
