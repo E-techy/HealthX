@@ -24,6 +24,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+// ADDED IMPORTS FOR MODELS AND STATE
+import com.example.healthx.data.models.AiFoodData
+import com.example.healthx.data.models.DailySummary
 import com.example.healthx.ui.theme.HealthXTheme
 import java.io.File
 
