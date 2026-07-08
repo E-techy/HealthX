@@ -35,6 +35,7 @@ fun HomeDrawerContent(
     onNavigateToReminders: () -> Unit,
     onNavigateToAlarmManager: () -> Unit,
     onNavigateToScanner: () -> Unit,
+    onNavigateToNutrition: () -> Unit, // ADDED NUTRITION NAVIGATION
     onNavigateToSubscriptions: () -> Unit,
     onSwitchAccountRequested: () -> Unit,
     onLogoutRequested: () -> Unit
@@ -78,6 +79,10 @@ fun HomeDrawerContent(
             }
             DrawerItem(icon = Icons.Default.QrCodeScanner, label = "Scanner") {
                 coroutineScope.launch { drawerState.close() }; onNavigateToScanner()
+            }
+            // ADDED NUTRITION DRAWER ITEM HERE
+            DrawerItem(icon = Icons.Default.Restaurant, label = "Nutrition") {
+                coroutineScope.launch { drawerState.close() }; onNavigateToNutrition()
             }
             DrawerItem(icon = Icons.Default.CardMembership, label = "Subscriptions") {
                 coroutineScope.launch { drawerState.close() }; onNavigateToSubscriptions()
