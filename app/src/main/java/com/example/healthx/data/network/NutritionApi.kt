@@ -3,6 +3,8 @@ package com.example.healthx.data.network
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.http.*
+// ADD THIS IMPORT TO FIX THE UNRESOLVED REFERENCES
+import com.example.healthx.data.models.*
 
 interface NutritionApi {
     @GET("api/nutrition/today")
