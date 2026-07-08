@@ -28,6 +28,8 @@ import com.example.healthx.ui.screens.launch.AccountSelectionViewModel
 import com.example.healthx.ui.screens.reminders.RemindersNavGraph
 import com.example.healthx.ui.screens.scanner.QRScannerScreen
 import com.example.healthx.ui.subscription.SubscriptionActivity
+// IMPORT THE NUTRITION ACTIVITY
+import com.example.healthx.ui.screens.nutrition.NutritionActivity
 import com.example.healthx.ui.theme.HealthXTheme
 import com.example.healthx.utils.LocalActiveAccount
 import com.google.firebase.FirebaseApp
@@ -93,7 +95,6 @@ class MainActivity : ComponentActivity() {
                             onNavigateToAiChat = { mainNavController.navigate("ai_chat") },
                             onNavigateToReminders = { mainNavController.navigate("reminders") },
 
-                            // ADDED: Triggers the actual Android Activity intent
                             onNavigateToAlarmManager = {
                                 context.startActivity(Intent(context, com.example.healthx.alarm_manager.AlarmManagerActivity::class.java))
                             },
@@ -102,6 +103,12 @@ class MainActivity : ComponentActivity() {
                             onNavigateToSubscriptions = {
                                 context.startActivity(Intent(context, SubscriptionActivity::class.java))
                             },
+
+                            // ADDED: Launching the new Nutrition Activity
+                            onNavigateToNutrition = {
+                                context.startActivity(Intent(context, NutritionActivity::class.java))
+                            },
+
                             onSwitchAccountRequested = { /* ... */ },
                             onLogoutRequested = { /* ... */ }
                         )
@@ -117,7 +124,6 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // 3. Added AI Chat Route
                     composable("ai_chat") {
                         ChatScreen(
                             onNavigateToSettings = { /* TODO: Route to settings if API key is missing */ }

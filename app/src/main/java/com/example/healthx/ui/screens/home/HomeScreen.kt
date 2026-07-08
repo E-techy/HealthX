@@ -43,6 +43,7 @@ fun HomeScreen(
     onNavigateToAlarmManager: () -> Unit,
     onNavigateToScanner: () -> Unit,
     onNavigateToSubscriptions: () -> Unit,
+    onNavigateToNutrition: () -> Unit, // ADDED HERE
     onSwitchAccountRequested: () -> Unit,
     onLogoutRequested: () -> Unit
 ) {
@@ -77,6 +78,7 @@ fun HomeScreen(
                     onNavigateToAlarmManager = onNavigateToAlarmManager,
                     onNavigateToScanner = onNavigateToScanner,
                     onNavigateToSubscriptions = onNavigateToSubscriptions,
+                    onNavigateToNutrition = onNavigateToNutrition, // FIXED HERE
                     onSwitchAccountRequested = onSwitchAccountRequested,
                     onLogoutRequested = onLogoutRequested
                 )
@@ -149,7 +151,7 @@ fun HomeScreen(
                     // --- 2. NUTRITION GOALS ---
                     item {
                         HomeNutritionSection(
-                            onNutritionClick = { /* TODO: Navigate to full nutrition screen */ }
+                            onNutritionClick = { onNavigateToNutrition() } // WIRED IT HERE AS WELL
                         )
                         Spacer(modifier = Modifier.height(32.dp))
                     }
