@@ -57,12 +57,16 @@
             android:theme="@style/Theme.HealthX"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity android:name=".ui.screens.settings.SettingsActivity" android:exported="false" />
+
         <activity
             android:name=".ui.screens.nutrition.NutritionActivity"
             android:exported="false"
             android:label="Nutrition Dashboard"
             android:theme="@style/Theme.HealthX"
             android:windowSoftInputMode="adjustResize" />
+
+
 
         <service
             android:name=".notification_manager.HealthXMessagingService"
