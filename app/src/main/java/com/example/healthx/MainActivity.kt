@@ -90,7 +90,9 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(
                             account = activeAccount!!,
                             hasMultipleAccounts = savedAccounts!!.size > 1,
-                            onNavigateToSettings = { /* ... */ },
+                            onNavigateToSettings = {
+                                context.startActivity(Intent(context, com.example.healthx.ui.screens.settings.SettingsActivity::class.java))
+                            },
                             onNavigateToApiKeys = { /* ... */ },
                             onNavigateToAiChat = { mainNavController.navigate("ai_chat") },
                             onNavigateToReminders = { mainNavController.navigate("reminders") },
