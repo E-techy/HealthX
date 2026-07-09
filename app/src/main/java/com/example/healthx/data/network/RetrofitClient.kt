@@ -9,9 +9,9 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS) // Important for large image uploads
-        .readTimeout(60, TimeUnit.SECONDS)  // Important for waiting on Gemini AI
+        .connectTimeout(400, TimeUnit.SECONDS)
+        .writeTimeout(400, TimeUnit.SECONDS) // Important for large image uploads
+        .readTimeout(400, TimeUnit.SECONDS)  // Important for waiting on Gemini AI
         .build()
 
     private val retrofit: Retrofit by lazy {
