@@ -11,26 +11,42 @@ data class AnalyzeNutritionResponse(
 )
 
 data class NutritionData(
+    @SerializedName("mealType") val mealType: String?,
     @SerializedName("foodItems") val foodItems: List<FoodItem>?
 )
 
 data class FoodItem(
     @SerializedName("foodName") val foodName: String?,
     @SerializedName("amountTaken") val amountTaken: String?,
-    @SerializedName("mealCategory") val mealCategory: String?,
+    @SerializedName("totalQuantity") val totalQuantity: String?,
+    @SerializedName("aiRecommendedQuantity") val aiRecommendedQuantity: String?,
+    @SerializedName("mealCategory") val mealCategory: String?, // VEG, NON_VEG, VEGAN, UNKNOWN
     @SerializedName("physicalState") val physicalState: String?,
     @SerializedName("isOrganic") val isOrganic: Boolean?,
+
     @SerializedName("ingredients") val ingredients: List<String>?,
     @SerializedName("allergens") val allergens: List<String>?,
     @SerializedName("chemicalsOrPreservatives") val chemicalsOrPreservatives: List<String>?,
 
-    // Core macros stored as Strings per your DB schema
+    // Core Macros
     @SerializedName("totalCalories") val totalCalories: String?,
     @SerializedName("totalProtein") val totalProtein: String?,
     @SerializedName("totalCarbs") val totalCarbs: String?,
     @SerializedName("totalFat") val totalFat: String?,
+    @SerializedName("saturatedFat") val saturatedFat: String?,
+    @SerializedName("unsaturatedFat") val unsaturatedFat: String?,
+    @SerializedName("totalWater") val totalWater: String?,
 
     @SerializedName("otherNutrients") val otherNutrients: List<Nutrient>?,
+
+    // Extra Data
+    @SerializedName("nutritionValuePerUnit") val nutritionValuePerUnit: String?,
+    @SerializedName("brandName") val brandName: String?,
+    @SerializedName("manufacturerInfo") val manufacturerInfo: String?,
+    @SerializedName("manufactureDate") val manufactureDate: String?,
+    @SerializedName("expiryDate") val expiryDate: String?,
+    @SerializedName("countryOfOrigin") val countryOfOrigin: String?,
+
     @SerializedName("foodScore") val foodScore: Double?,
     @SerializedName("foodScoreReason") val foodScoreReason: String?,
     @SerializedName("aiInsights") val aiInsights: AiInsights?
@@ -46,7 +62,6 @@ data class AiInsights(
     @SerializedName("whyNot") val whyNot: List<String>?
 )
 
-// Error Response Model (for parsing 400, 403, and 500 errors)
 data class NutritionErrorResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("message") val message: String?,
