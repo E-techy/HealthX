@@ -31,4 +31,6 @@ object RetrofitClient {
 
 
     val settingsApi: SettingsApi by lazy { retrofit.create(SettingsApi::class.java) }
+
+    val nutritionApi: NutritionApi by lazy { retrofit.create(NutritionApi::class.java) }
 }
