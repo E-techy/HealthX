@@ -1,14 +1,16 @@
 package com.example.healthx.nutrition_manager
 
+import android.app.Application
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-// Updated to the correct model package
+import com.example.healthx.data.local.SessionManager
 import com.example.healthx.data.model.AnalyzeNutritionResponse
 import com.example.healthx.data.network.RetrofitClient
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -25,14 +27,15 @@ sealed class NutritionScreenState {
     data class Success(val data: AnalyzeNutritionResponse) : NutritionScreenState()
 }
 
-class NutritionViewModel : ViewModel() {
+// CHANGED: Now extends AndroidViewModel to access Application context for SessionManager
+class NutritionViewModel(application: Application) : AndroidViewModel(application) {
 
     private val TAG = "NutritionViewModel"
+    private val sessionManager = SessionManager(application) // ADDED: SessionManager instance
 
     var currentScreen = mutableStateOf<NutritionScreenState>(NutritionScreenState.Home)
         private set
 
-    // Holds images from both Camera and Gallery
     val selectedImages = mutableStateListOf<Uri>()
     var mealAmountInput = mutableStateOf("")
 
@@ -56,6 +59,12 @@ class NutritionViewModel : ViewModel() {
         }
     }
 
+    // Helper to get the real token
+    private suspend fun getAuthToken(): String? {
+        val account = sessionManager.activeAccountFlow.firstOrNull() ?: return null
+        return "Bearer ${account.token}"
+    }
+
     fun analyzeMeal(imageFiles: List<File>) {
         Log.i(TAG, "Starting meal analysis with ${imageFiles.size} images.")
 
@@ -69,27 +78,31 @@ class NutritionViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
+                // FIXED: Fetching the REAL token from SessionManager
+                val token = getAuthToken()
+                if (token == null) {
+                    Log.e(TAG, "❌ Fetch failed: Active Session Token is missing or NULL")
+                    navigateTo(NutritionScreenState.Error("Session token missing. Please re-authenticate."))
+                    return@launch
+                }
+
                 Log.d(TAG, "Preparing image parts...")
-                // 1. Prepare Images
                 val imageParts = imageFiles.map { file ->
                     val requestFile = file.asRequestBody("image/*".toMediaTypeOrNull())
                     MultipartBody.Part.createFormData("images", file.name, requestFile)
                 }
 
                 Log.d(TAG, "Preparing text fields. Input Amount: '${mealAmountInput.value}'")
-                // 2. Prepare Text Fields
                 val userProfilePart = NutritionHelper.createPartFromString(NutritionHelper.getFakeUserProfile())
                 val amountPart = NutritionHelper.createPartFromString(mealAmountInput.value)
 
-                Log.i(TAG, "Executing network call to RetrofitClient.nutritionApi.analyzeFoodImages...")
-                // 3. Make the Network Call
+                Log.i(TAG, "Executing network call using real Token prefix: ${token.take(15)}...")
+
                 val response = RetrofitClient.nutritionApi.analyzeFoodImages(
-                    token = "Bearer FAKE_JWT_TOKEN", // Replace with real token manager later
+                    token = token, // FIXED: Passing the real Bearer token
                     images = imageParts,
                     userInputAmount = amountPart,
                     userProfile = userProfilePart
-                    // apiKey = NutritionHelper.getApiKeyPart(),
-                    // modelName = NutritionHelper.getModelNamePart()
                 )
 
                 if (response.isSuccessful) {
