@@ -4,23 +4,23 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerValues
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.healthx.data.network.ApiKeyItem
@@ -48,47 +48,63 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), onBack: () -> Uni
     val settingsData by viewModel.settingsData.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
 
-    // Local input view states
+    // Form inputs matching state parameters
     var nameState by remember { mutableStateOf("") }
     var weightState by remember { mutableStateOf("") }
     var heightState by remember { mutableStateOf("") }
     var ethnicityState by remember { mutableStateOf("") }
     var countryState by remember { mutableStateOf("") }
+    var customCountryState by remember { mutableStateOf("") }
     var stateRegionState by remember { mutableStateOf("") }
     var languageState by remember { mutableStateOf("") }
 
-    var themeExpanded by remember { mutableStateOf(false) }
-    var newAllergyText by remember { mutableStateOf("") }
+    // Display mode control configurations
+    var isEditingProfile by remember { mutableStateOf(false) }
 
-    // API Key temporary selection mechanics
+    // Dropdown visual toggle selectors
+    var ethnicityExpanded by remember { mutableStateOf(false) }
+    var countryExpanded by remember { mutableStateOf(false) }
+    var languageExpanded by remember { mutableStateOf(false) }
+    var themeExpanded by remember { mutableStateOf(false) }
+
+    // Sub-elements text variables
+    var newAllergyText by remember { mutableStateOf("") }
     var selectedCompany by remember { mutableStateOf("Google") }
     var selectedModel by remember { mutableStateOf("gemini-2.5-flash") }
     var apiKeyValueState by remember { mutableStateOf("") }
     var companyExpanded by remember { mutableStateOf(false) }
     var modelExpanded by remember { mutableStateOf(false) }
 
-    // Sync database data payload to view state when fetched
+    // Sync database data payload cleanly without dropping localized input states
     LaunchedEffect(settingsData) {
         nameState = settingsData.name ?: ""
         weightState = settingsData.weight ?: ""
         heightState = settingsData.height ?: ""
         ethnicityState = settingsData.ethnicity ?: ""
-        countryState = settingsData.country ?: ""
+
+        val incomingCountry = settingsData.country ?: ""
+        if (viewModel.countryOptions.contains(incomingCountry) || incomingCountry.isBlank()) {
+            countryState = incomingCountry
+            customCountryState = ""
+        } else {
+            countryState = "Other"
+            customCountryState = incomingCountry
+        }
+
         stateRegionState = settingsData.state ?: ""
         languageState = settingsData.preferredLanguage ?: ""
     }
 
-    // Trigger Initial Data Fetch
     LaunchedEffect(Unit) {
         viewModel.fetchSettings()
     }
 
-    // Handle incoming state notifications
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(uiState) {
         when (uiState) {
             is SettingsUiState.Success -> {
                 Toast.makeText(context, (uiState as SettingsUiState.Success).message, Toast.LENGTH_SHORT).show()
+                isEditingProfile = false
                 viewModel.resetUiState()
             }
             is SettingsUiState.Error -> {
@@ -102,7 +118,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), onBack: () -> Uni
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text("Profile Dashboard", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -110,7 +126,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), onBack: () -> Uni
                 },
                 actions = {
                     IconButton(onClick = { viewModel.fetchSettings() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Data")
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh remote configuration")
                     }
                 }
             )
@@ -125,181 +141,344 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), onBack: () -> Uni
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(16.dp)
+                    .padding(horizontal = 16.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Profile & Bio Section
-                Text("User Profile Info", style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(value = nameState, onValueChange = { nameState = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = weightState, onValueChange = { weightState = it }, label = { Text("Weight") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = heightState, onValueChange = { heightState = it }, label = { Text("Height") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(4.dp))
 
-                Divider()
-
-                // Demographics
-                Text("Demographics & Locale", style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(value = ethnicityState, onValueChange = { ethnicityState = it }, label = { Text("Ethnicity") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = countryState, onValueChange = { countryState = it }, label = { Text("Country") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = stateRegionState, onValueChange = { stateRegionState = it }, label = { Text("State") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = languageState, onValueChange = { languageState = it }, label = { Text("Preferred Language") }, modifier = Modifier.fillMaxWidth())
-
-                Divider()
-
-                // Theme Dropdown Selector
-                Text("App Preferences", style = MaterialTheme.typography.titleMedium)
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = settingsData.theme.uppercase(),
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Theme Preference") },
-                        modifier = Modifier.fillMaxWidth(),
-                        trailingIcon = {
-                            TextButton(onClick = { themeExpanded = true }) { Text("Select") }
-                        }
-                    )
-                    DropdownMenu(expanded = themeExpanded, onDismissRequest = { themeExpanded = false }) {
-                        listOf("system", "light", "dark").forEach { selection ->
-                            DropdownMenuItem(
-                                text = { Text(selection.uppercase()) },
-                                onClick = {
-                                    viewModel.updateSettings(settingsData.copy(theme = selection))
-                                    themeExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Divider()
-
-                // Allergies Management Engine
-                Text("Allergies List Management", style = MaterialTheme.typography.titleMedium)
-                Row(
+                // Premium Profile Visual Header Card Component
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    OutlinedTextField(
-                        value = newAllergyText,
-                        onValueChange = { newAllergyText = it },
-                        label = { Text("Add New Allergy") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = {
-                        if (newAllergyText.isNotBlank()) {
-                            viewModel.addAllergy(newAllergyText)
-                            newAllergyText = ""
-                        }
-                    }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Item")
-                    }
-                }
-
-                // Render lists of strings inside flow container row mappings
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    settingsData.allergies.forEach { item ->
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)).padding(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(item)
-                            Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.clickable {
-                                viewModel.removeAllergy(item)
-                            })
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {                                Box(
+                                    modifier = Modifier.size(54.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(28.dp))
+                                }
+                                Column {
+                                    Text(
+                                        text = nameState.ifBlank { "Anonymous User" },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Metrics Summary Tracker",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    if (isEditingProfile) {
+                                        // Reset configurations back to original when canceling out
+                                        viewModel.fetchSettings()
+                                    }
+                                    isEditingProfile = !isEditingProfile
+                                },
+                                colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Icon(
+                                    imageVector = if (isEditingProfile) Icons.Default.Close else Icons.Default.Edit,
+                                    contentDescription = "Toggle editing state",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        // Physical metrics block rendering configuration layout
+                        if (!isEditingProfile) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text("Weight", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                    Text(weightState.ifBlank { "Not Set" }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                }
+                                Column {
+                                    Text("Height", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                    Text(heightState.ifBlank { "Not Set" }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                }
+                                Column(modifier = Modifier.padding(end = 16.dp)) {
+                                    Text("Language", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                    Text(languageState.ifBlank { "Not Set" }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                OutlinedTextField(value = nameState, onValueChange = { nameState = it }, label = { Text("Display Name") }, modifier = Modifier.fillMaxWidth())
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedTextField(value = weightState, onValueChange = { weightState = it }, label = { Text("Weight (e.g. 70kg)") }, modifier = Modifier.weight(1f))
+                                    OutlinedTextField(value = heightState, onValueChange = { heightState = it }, label = { Text("Height (e.g. 175cm)") }, modifier = Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
                 }
 
-                Divider()
+                // Advanced Regional Custom Layout Card Section
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
 
-                // Dynamic Cascading AI Token Integration Context
-                Text("External AI Model API Keys Integration", style = MaterialTheme.typography.titleMedium)
+                        // Advanced Ethnicity Dropdown Implementation
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = ethnicityState,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Ethnicity") },
+                                modifier = Modifier.fillMaxWidth(),
+                                trailingIcon = {
+                                    IconButton(onClick = { ethnicityExpanded = true }) {
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                    }
+                                }
+                            )
+                            DropdownMenu(expanded = ethnicityExpanded, onDismissRequest = { ethnicityExpanded = false }, modifier = Modifier.fillMaxWidth(0.85f)) {
+                                viewModel.ethnicityOptions.forEach { option ->
+                                    DropdownMenuItem(text = { Text(option) }, onClick = {
+                                        ethnicityState = option
+                                        ethnicityExpanded = false
+                                    })
+                                }
+                            }
+                        }
 
-                // Company Dropdown Selection
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(value = selectedCompany, onValueChange = {}, readOnly = true, label = { Text("AI Provider") }, modifier = Modifier.fillMaxWidth(), trailingIcon = {
-                        TextButton(onClick = { companyExpanded = true }) { Text("Change") }
-                    })
-                    DropdownMenu(expanded = companyExpanded, onDismissRequest = { companyExpanded = false }) {
-                        viewModel.aiProviders.forEach { item ->
-                            DropdownMenuItem(text = { Text(item) }, onClick = {
-                                selectedCompany = item
-                                selectedModel = viewModel.modelsMap[item]?.first() ?: ""
-                                companyExpanded = false
-                            })
+                        // Advanced Cascading Country Dropdown Setup
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = countryState,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Country") },
+                                modifier = Modifier.fillMaxWidth(),
+                                trailingIcon = {
+                                    IconButton(onClick = { countryExpanded = true }) {
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                    }
+                                }
+                            )
+                            DropdownMenu(expanded = countryExpanded, onDismissRequest = { countryExpanded = false }, modifier = Modifier.fillMaxWidth(0.85f)) {
+                                viewModel.countryOptions.forEach { option ->
+                                    DropdownMenuItem(text = { Text(option) }, onClick = {
+                                        countryState = option
+                                        countryExpanded = false
+                                    })
+                                }
+                            }
+                        }
+
+                        // Conditional Visibility rendering logic when target country selection matches "Other"
+                        AnimatedVisibility(visible = countryState == "Other") {
+                            OutlinedTextField(
+                                value = customCountryState,
+                                onValueChange = { customCountryState = it },
+                                label = { Text("Specify Country Name") },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp)
+                            )
+                        }
+
+                        OutlinedTextField(value = stateRegionState, onValueChange = { stateRegionState = it }, label = { Text("State / Territory") }, modifier = Modifier.fillMaxWidth())
+
+                        // Advanced Preferred Language Dropdown Implementation
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = languageState,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Preferred Language") },
+                                modifier = Modifier.fillMaxWidth(),
+                                trailingIcon = {
+                                    IconButton(onClick = { languageExpanded = true }) {
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                    }
+                                }
+                            )
+                            DropdownMenu(expanded = languageExpanded, onDismissRequest = { languageExpanded = false }, modifier = Modifier.fillMaxWidth(0.85f)) {
+                                viewModel.languageOptions.forEach { option ->
+                                    DropdownMenuItem(text = { Text(option) }, onClick = {
+                                        languageState = option
+                                        languageExpanded = false
+                                    })
+                                }
+                            }
                         }
                     }
                 }
 
-                // Model Dropdown Selection (Dependent on Company)
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(value = selectedModel, onValueChange = {}, readOnly = true, label = { Text("Model Spec") }, modifier = Modifier.fillMaxWidth(), trailingIcon = {
-                        TextButton(onClick = { modelExpanded = true }) { Text("Change") }
-                    })
-                    DropdownMenu(expanded = modelExpanded, onDismissRequest = { modelExpanded = false }) {
-                        (viewModel.modelsMap[selectedCompany] ?: emptyList()).forEach { modelOpt ->
-                            DropdownMenuItem(text = { Text(modelOpt) }, onClick = {
-                                selectedModel = modelOpt
-                                modelExpanded = false
-                            })
+                // Global Preferences Layout (Theme Configuration Management)
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        OutlinedTextField(
+                            value = settingsData.theme.uppercase(),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Visual Theme Mode") },
+                            modifier = Modifier.fillMaxWidth(),
+                            trailingIcon = {
+                                TextButton(onClick = { themeExpanded = true }) { Text("Adjust") }
+                            }
+                        )
+                        DropdownMenu(expanded = themeExpanded, onDismissRequest = { themeExpanded = false }) {
+                            listOf("system", "light", "dark").forEach { mode ->
+                                DropdownMenuItem(text = { Text(mode.uppercase()) }, onClick = {
+                                    viewModel.updateSettings(settingsData.copy(theme = mode))
+                                    themeExpanded = false
+                                })
+                            }
                         }
                     }
                 }
 
-                OutlinedTextField(value = apiKeyValueState, onValueChange = { apiKeyValueState = it }, label = { Text("API Key Token Value") }, modifier = Modifier.fillMaxWidth())
+                // Medical/Allergies Management Engine UI Cards Section
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Allergies Profiles", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = newAllergyText,
+                                onValueChange = { newAllergyText = it },
+                                label = { Text("Add Allergy") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = {
+                                if (newAllergyText.isNotBlank()) {
+                                    viewModel.addAllergy(newAllergyText)
+                                    newAllergyText = ""
+                                }
+                            }) {
+                                Icon(Icons.Default.Add, contentDescription = "Insert")
+                            }
+                        }
 
+                        // Modern Chip list presentation mapping
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            settingsData.allergies.forEach { allergy ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp)).padding(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(allergy, style = MaterialTheme.typography.bodyMedium)
+                                    Icon(Icons.Default.Close, contentDescription = "Drop", modifier = Modifier.size(18.dp).clickable {
+                                        viewModel.removeAllergy(allergy)
+                                    })
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // AI Engine Token Authorization Configurations Layout Card Component
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("AI Key Integrations", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+
+                        // Providers selection drop-down matrix component
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(value = selectedCompany, onValueChange = {}, readOnly = true, label = { Text("Provider Engine") }, modifier = Modifier.fillMaxWidth(), trailingIcon = {
+                                IconButton(onClick = { companyExpanded = true }) { Icon(Icons.Default.ArrowDropDown, contentDescription = null) }
+                            })
+                            DropdownMenu(expanded = companyExpanded, onDismissRequest = { companyExpanded = false }) {
+                                viewModel.aiProviders.forEach { company ->
+                                    DropdownMenuItem(text = { Text(company) }, onClick = {
+                                        selectedCompany = company
+                                        selectedModel = viewModel.modelsMap[company]?.first() ?: ""
+                                        companyExpanded = false
+                                    })
+                                }
+                            }
+                        }
+
+                        // Dependent model execution specs cascading mapping
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(value = selectedModel, onValueChange = {}, readOnly = true, label = { Text("Model Profile Definition") }, modifier = Modifier.fillMaxWidth(), trailingIcon = {
+                                IconButton(onClick = { modelExpanded = true }) { Icon(Icons.Default.ArrowDropDown, contentDescription = null) }
+                            })
+                            DropdownMenu(expanded = modelExpanded, onDismissRequest = { modelExpanded = false }) {
+                                (viewModel.modelsMap[selectedCompany] ?: emptyList()).forEach { mappingModel ->
+                                    DropdownMenuItem(text = { Text(mappingModel) }, onClick = {
+                                        selectedModel = mappingModel
+                                        modelExpanded = false
+                                    })
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(value = apiKeyValueState, onValueChange = { apiKeyValueState = it }, label = { Text("Secure Access Token Key") }, modifier = Modifier.fillMaxWidth())
+
+                        Button(
+                            onClick = {
+                                if (apiKeyValueState.isNotBlank()) {
+                                    viewModel.addApiKey(ApiKeyItem(selectedCompany, selectedModel, apiKeyValueState))
+                                    apiKeyValueState = ""
+                                }
+                            },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Map Key Infrastructure")
+                        }
+
+                        // Active security configuration entries linked to active profiles array mapping
+                        settingsData.apiKeys.forEach { integrationKey ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp)).padding(8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("${integrationKey.companyName} » ${integrationKey.modelName}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                    Text("•••• •••• " + integrationKey.apiKeyValue.takeLast(4), style = MaterialTheme.typography.labelSmall)
+                                }
+                                IconButton(onClick = { viewModel.removeApiKey(integrationKey) }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Purge Configuration Item", modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Persistent Execution Deployment Save Actions Button Component
                 Button(
                     onClick = {
-                        if (apiKeyValueState.isNotBlank()) {
-                            viewModel.addApiKey(ApiKeyItem(selectedCompany, selectedModel, apiKeyValueState))
-                            apiKeyValueState = ""
-                        }
-                    },
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("Add/Update Configuration Key")
-                }
-
-                // Active Model Infrastructure Configurations Linked to This Account
-                settingsData.apiKeys.forEach { key ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(6.dp)).padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("${key.companyName} (${key.modelName})", style = MaterialTheme.typography.bodyMedium)
-                            Text("••••••••" + key.apiKeyValue.takeLast(4), style = MaterialTheme.typography.bodySmall)
-                        }
-                        IconButton(onClick = { viewModel.removeApiKey(key) }) {
-                            Icon(Icons.Default.Close, contentDescription = "Delete configuration key reference")
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Global Save Updates trigger button
-                Button(
-                    onClick = {
-                        val payload = settingsData.copy(
+                        val validatedCountryPayload = if (countryState == "Other") customCountryState.trim() else countryState
+                        val combinedSubmissionData = settingsData.copy(
                             name = nameState.ifBlank { null },
                             weight = weightState.ifBlank { null },
                             height = heightState.ifBlank { null },
                             ethnicity = ethnicityState.ifBlank { null },
-                            country = countryState.ifBlank { null },
+                            country = validatedCountryPayload.ifBlank { null },
                             state = stateRegionState.ifBlank { null },
                             preferredLanguage = languageState.ifBlank { null }
                         )
-                        viewModel.updateSettings(payload)
+                        viewModel.updateSettings(combinedSubmissionData)
                     },
-                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Save Configuration Profile")
+                    Text("Apply & Sync Server Profile", fontWeight = FontWeight.Bold)
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }

@@ -1,6 +1,7 @@
 package com.example.healthx.ui.screens.settings
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.healthx.data.local.SessionManager
@@ -22,6 +23,7 @@ sealed class SettingsUiState {
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val sessionManager = SessionManager(application)
+    private val TAG = "HEALTHX_SETTINGS"
 
     private val _settingsData = MutableStateFlow(UserSettingsData())
     val settingsData: StateFlow<UserSettingsData> = _settingsData
@@ -29,7 +31,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _uiState = MutableStateFlow<SettingsUiState>(SettingsUiState.Idle)
     val uiState: StateFlow<SettingsUiState> = _uiState
 
-    // Available AI Models map definition
+    // Static collections for advanced dropdown parameters
+    val ethnicityOptions = listOf("South Asian", "East Asian", "Caucasian", "African American", "Hispanic", "Other")
+    val countryOptions = listOf("India", "United States", "United Kingdom", "Canada", "Australia", "Other")
+    val languageOptions = listOf("English", "Hindi", "Spanish", "French", "German")
+
     val aiProviders = listOf("Google", "OpenAI")
     val modelsMap = mapOf(
         "Google" to listOf("gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"),
@@ -38,55 +44,77 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun fetchSettings() {
         viewModelScope.launch {
+            Log.d(TAG, "🔄 Initiating fetchSettings() call...")
             _uiState.value = SettingsUiState.Loading
+
             val token = getAuthToken()
             if (token == null) {
+                Log.e(TAG, "❌ Fetch failed: Active Session Token is missing or NULL")
                 _uiState.value = SettingsUiState.Error("Session token missing. Re-authenticate.")
                 return@launch
             }
 
             try {
+                Log.d(TAG, "📡 Sending GET request to /api/settings using Token prefix: ${token.take(15)}...")
                 val response = RetrofitClient.settingsApi.getSettings(token)
+
                 if (response.isSuccessful && response.body()?.success == true) {
-                    _settingsData.value = response.body()!!.data
+                    val receivedData = response.body()!!.data
+                    Log.d(TAG, "✅ Fetch Success! Received Server Payload: $receivedData")
+                    _settingsData.value = receivedData
                     _uiState.value = SettingsUiState.Idle
                 } else {
-                    _uiState.value = SettingsUiState.Error(response.message() ?: "Failed to get settings")
+                    val rawError = response.errorBody()?.string()
+                    Log.e(TAG, "❌ Server Rejected Fetch Request! Code: ${response.code()}, ErrorBody: $rawError")
+                    _uiState.value = SettingsUiState.Error("Server returned error ${response.code()}")
                 }
             } catch (e: Exception) {
-                _uiState.value = SettingsUiState.Error(e.localizedMessage ?: "Network error occurred")
+                Log.e(TAG, "💥 Critical exception during settings fetching!", e)
+                _uiState.value = SettingsUiState.Error(e.localizedMessage ?: "Network connection error")
             }
         }
     }
 
     fun updateSettings(updatedData: UserSettingsData) {
         viewModelScope.launch {
+            Log.d(TAG, "💾 Initiating updateSettings() process...")
+            Log.d(TAG, "📤 Payload details targeted for transmission: $updatedData")
             _uiState.value = SettingsUiState.Loading
+
             val token = getAuthToken()
             if (token == null) {
-                _uiState.value = SettingsUiState.Error("Session missing.")
+                Log.e(TAG, "❌ Update operation aborted: Session Token is unavailable")
+                _uiState.value = SettingsUiState.Error("Authorization credentials lost.")
                 return@launch
             }
 
             try {
+                Log.d(TAG, "📡 Transmitting PUT payload structure to server...")
                 val response = RetrofitClient.settingsApi.updateSettings(token, updatedData)
+
                 if (response.isSuccessful && response.body()?.success == true) {
-                    _settingsData.value = response.body()!!.data
+                    val savedData = response.body()!!.data
+                    Log.d(TAG, "✅ Update Confirmed! Returned Server Payload confirmation: $savedData")
+
+                    // We merge the old data with the new server data to guarantee local state fields are preserved
+                    _settingsData.value = savedData
                     _uiState.value = SettingsUiState.Success("Settings updated successfully")
                 } else {
-                    _uiState.value = SettingsUiState.Error(response.message() ?: "Failed to update settings")
+                    val rawError = response.errorBody()?.string()
+                    Log.e(TAG, "❌ Server Update Refusal! Status Code: ${response.code()}, Body: $rawError")
+                    _uiState.value = SettingsUiState.Error("Save failed: Code ${response.code()}")
                 }
             } catch (e: Exception) {
-                _uiState.value = SettingsUiState.Error(e.localizedMessage ?: "Network error")
+                Log.e(TAG, "💥 Critical connectivity exception during update transmission!", e)
+                _uiState.value = SettingsUiState.Error(e.localizedMessage ?: "Failed to reach server")
             }
         }
     }
 
-    // Mutation helpers for Lists
     fun addAllergy(allergy: String) {
-        if (allergy.isBlank()) return
         val clean = allergy.trim()
-        if (!_settingsData.value.allergies.contains(clean)) {
+        if (clean.isNotBlank() && !_settingsData.value.allergies.contains(clean)) {
+            Log.d(TAG, "➕ Local Allergy Append: $clean")
             _settingsData.value = _settingsData.value.copy(
                 allergies = _settingsData.value.allergies + clean
             )
@@ -94,13 +122,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun removeAllergy(allergy: String) {
+        Log.d(TAG, "➖ Local Allergy Detach: $allergy")
         _settingsData.value = _settingsData.value.copy(
             allergies = _settingsData.value.allergies - allergy
         )
     }
 
     fun addApiKey(key: ApiKeyItem) {
-        // filter out existing matching pair configuration if user updates it
+        Log.d(TAG, "➕ Local API Matrix Registration/Update for Provider: ${key.companyName}")
         val filtered = _settingsData.value.apiKeys.filterNot {
             it.companyName == key.companyName && it.modelName == key.modelName
         }
@@ -110,6 +139,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun removeApiKey(key: ApiKeyItem) {
+        Log.d(TAG, "➖ Local API Key Reference Removal: ${key.companyName} -> ${key.modelName}")
         _settingsData.value = _settingsData.value.copy(
             apiKeys = _settingsData.value.apiKeys - key
         )
@@ -117,7 +147,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private suspend fun getAuthToken(): String? {
         val account = sessionManager.activeAccountFlow.firstOrNull() ?: return null
-        // Ensure "Bearer " format prefix matches authMiddleware verification logic
         return "Bearer ${account.token}"
     }
 
