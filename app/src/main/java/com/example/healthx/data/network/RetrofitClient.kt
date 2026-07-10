@@ -29,7 +29,6 @@ object RetrofitClient {
 
     val homeApi: HomeApi by lazy { retrofit.create(HomeApi::class.java) }
 
-    val nutritionApi: NutritionApi by lazy { retrofit.create(NutritionApi::class.java) }
 
     val settingsApi: SettingsApi by lazy { retrofit.create(SettingsApi::class.java) }
 }
