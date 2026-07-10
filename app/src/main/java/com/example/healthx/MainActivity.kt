@@ -29,7 +29,7 @@ import com.example.healthx.ui.screens.reminders.RemindersNavGraph
 import com.example.healthx.ui.screens.scanner.QRScannerScreen
 import com.example.healthx.ui.subscription.SubscriptionActivity
 // IMPORT THE NUTRITION ACTIVITY
-import com.example.healthx.ui.screens.nutrition.NutritionActivity
+import com.example.healthx.nutrition_manager.NutritionActivity
 import com.example.healthx.ui.theme.HealthXTheme
 import com.example.healthx.utils.LocalActiveAccount
 import com.google.firebase.FirebaseApp
