@@ -41,7 +41,6 @@ fun NutritionManagerApp(viewModel: NutritionViewModel) {
         }
     }
 }
-
 @Composable
 fun HomeScreen(viewModel: NutritionViewModel) {
     Scaffold(
@@ -52,7 +51,8 @@ fun HomeScreen(viewModel: NutritionViewModel) {
                 containerColor = AccentColor,
                 contentColor = Color.White
             ) {
-                Icon(Icons.Default.CameraAlt, contentDescription = "Scan Meal")
+                // Fixed: Changed to a scanner-style icon
+                Icon(Icons.Default.CropFree, contentDescription = "Scan Meal")
             }
         }
     ) { padding ->
@@ -69,12 +69,21 @@ fun HomeScreen(viewModel: NutritionViewModel) {
 
 @Composable
 fun ScannerScreen(viewModel: NutritionViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     // Gallery Launcher
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         uris.forEach { viewModel.addImage(it) }
     }
 
-    // Top Bar with Back and Close
+    // Camera Launcher
+    var currentCameraUri by remember { mutableStateOf<Uri?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success && currentCameraUri != null) {
+            viewModel.addImage(currentCameraUri!!)
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             IconButton(onClick = { viewModel.navigateTo(NutritionScreenState.Home) }) {
@@ -89,7 +98,7 @@ fun ScannerScreen(viewModel: NutritionViewModel) {
         Text("Scan Meal", style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Image Preview Carousel
+        // Image Preview Carousel (FIXED SIZE)
         if (viewModel.selectedImages.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text("No images selected.", color = Color.Gray)
@@ -97,7 +106,8 @@ fun ScannerScreen(viewModel: NutritionViewModel) {
         } else {
             LazyRow(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 items(viewModel.selectedImages) { uri ->
                     ImagePreviewCard(uri = uri, onRemove = { viewModel.removeImage(uri) })
@@ -118,15 +128,18 @@ fun ScannerScreen(viewModel: NutritionViewModel) {
                 Icon(Icons.Default.PhotoLibrary, contentDescription = "Gallery", tint = Color.White)
             }
 
-            // In a real app, you'd trigger Camera capture here. Using a placeholder button for layout.
+            // FIXED: Live Camera Action
             IconButton(
-                onClick = { /* Trigger Camera Intent Here */ },
+                onClick = {
+                    val uri = FileUtil.createTempCameraUri(context)
+                    currentCameraUri = uri
+                    cameraLauncher.launch(uri)
+                },
                 modifier = Modifier.background(AccentColor, CircleShape).size(72.dp)
             ) {
-                Icon(Icons.Default.CameraAlt, contentDescription = "Camera", tint = Color.White, modifier = Modifier.size(32.dp))
+                Icon(Icons.Default.DocumentScanner, contentDescription = "Camera", tint = Color.White, modifier = Modifier.size(32.dp))
             }
 
-            // Proceed Arrow (Only visible if images exist)
             if (viewModel.selectedImages.isNotEmpty()) {
                 IconButton(
                     onClick = { viewModel.navigateTo(NutritionScreenState.AmountInput) },
@@ -135,7 +148,7 @@ fun ScannerScreen(viewModel: NutritionViewModel) {
                     Icon(Icons.Default.ArrowForward, contentDescription = "Proceed", tint = DarkBackground)
                 }
             } else {
-                Spacer(modifier = Modifier.size(56.dp)) // Maintain spacing
+                Spacer(modifier = Modifier.size(56.dp))
             }
         }
     }
@@ -143,7 +156,8 @@ fun ScannerScreen(viewModel: NutritionViewModel) {
 
 @Composable
 fun ImagePreviewCard(uri: Uri, onRemove: () -> Unit) {
-    Box(modifier = Modifier.width(200.dp).fillMaxHeight(0.8f).clip(RoundedCornerShape(16.dp))) {
+    // FIXED: Enforced a strict 100.dp square size so they are previews, not posters
+    Box(modifier = Modifier.size(100.dp).clip(RoundedCornerShape(12.dp))) {
         AsyncImage(
             model = uri,
             contentDescription = "Meal Preview",
@@ -152,15 +166,17 @@ fun ImagePreviewCard(uri: Uri, onRemove: () -> Unit) {
         )
         IconButton(
             onClick = onRemove,
-            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
+            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape).size(24.dp)
         ) {
-            Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.White)
+            Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(16.dp))
         }
     }
 }
 
 @Composable
 fun AmountInputScreen(viewModel: NutritionViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             IconButton(onClick = { viewModel.navigateTo(NutritionScreenState.Scanner) }) {
@@ -195,9 +211,11 @@ fun AmountInputScreen(viewModel: NutritionViewModel) {
         Spacer(modifier = Modifier.weight(1f))
         Button(
             onClick = {
-                // TODO: In your actual Activity, map your Uri list to actual java.io.File objects here
-                val fakeFileList = emptyList<File>()
-                viewModel.analyzeMeal(fakeFileList)
+                // FIXED: Process the Uris into real, compressed files before sending
+                val actualFiles = viewModel.selectedImages.mapNotNull { uri ->
+                    FileUtil.uriToCompressedFile(context, uri)
+                }
+                viewModel.analyzeMeal(actualFiles)
             },
             colors = ButtonDefaults.buttonColors(containerColor = AccentColor),
             modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -207,7 +225,6 @@ fun AmountInputScreen(viewModel: NutritionViewModel) {
         }
     }
 }
-
 @Composable
 fun LoadingScreen() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
