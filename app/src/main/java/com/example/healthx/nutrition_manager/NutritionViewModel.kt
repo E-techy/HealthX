@@ -88,7 +88,8 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
 
                 Log.d(TAG, "Preparing image parts...")
                 val imageParts = imageFiles.map { file ->
-                    val requestFile = file.asRequestBody("image/*".toMediaTypeOrNull())
+                    // Explicitly declare it as a JPEG since FileUtil compresses it to JPEG
+                    val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
                     MultipartBody.Part.createFormData("images", file.name, requestFile)
                 }
 
