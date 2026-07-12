@@ -10,7 +10,11 @@ import retrofit2.http.POST
 import retrofit2.http.Part
 import retrofit2.http.Query
 import com.example.healthx.data.model.AnalyzeNutritionResponse
+import com.example.healthx.data.model.CreateGoalRequest
+import com.example.healthx.data.model.GoalsListResponse
 import com.example.healthx.data.model.MealHistoryResponse
+import com.example.healthx.data.model.SingleGoalResponse
+import retrofit2.http.Body
 
 interface NutritionApi {
 
@@ -35,4 +39,17 @@ interface NutritionApi {
         @Query("mealId") mealId: String? = null,
         @Query("show") show: String? = null
     ): Response<MealHistoryResponse>
+
+    @GET("api/nutrition/goals")
+    suspend fun getGoals(
+        @Header("Authorization") token: String,
+        @Query("show") show: String? = null // null for active, "expired", or "all"
+    ): Response<GoalsListResponse>
+
+    // Create Goal
+    @POST("api/nutrition/goals")
+    suspend fun createGoal(
+        @Header("Authorization") token: String,
+        @Body request: CreateGoalRequest
+    ): Response<SingleGoalResponse>
 }
