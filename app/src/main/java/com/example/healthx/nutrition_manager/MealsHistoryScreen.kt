@@ -13,10 +13,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -168,7 +171,7 @@ fun HistoryMealCard(meal: MealHistoryItem) {
                 .background(NutritionUiTokens.CardGradient)
                 .padding(20.dp)
         ) {
-            // --- HEADER INTERACTION ROW ---
+            // --- HEADER ROW ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -219,40 +222,47 @@ fun HistoryMealCard(meal: MealHistoryItem) {
                 }
             }
 
-            // --- COLLAPSIBLE CONTENT SYSTEM ---
+            // --- FULL DATA DISPLAY (EXPANDED) ---
             AnimatedVisibility(visible = isExpanded) {
                 Column(modifier = Modifier.padding(top = 16.dp)) {
                     HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(bottom = 16.dp))
 
-                    // Detailed Food Items List with Macro Badges
                     if (!meal.foodItems.isNullOrEmpty()) {
-                        Text("Items Logged", color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-
                         meal.foodItems.forEach { food ->
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 6.dp)
-                                    .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                                    .border(1.dp, Color.White.copy(alpha = 0.03f), RoundedCornerShape(12.dp))
+                                    .padding(vertical = 8.dp)
+                                    .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
                                     .padding(16.dp)
                             ) {
+                                // Food Name & Score
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(food.foodName ?: "Unknown", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                    food.foodScore?.let { score ->
+                                        Row(
+                                            modifier = Modifier.background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.Star, contentDescription = "Score", tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(score.toString(), color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
                                 }
                                 food.amountTaken?.let {
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text(it, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                    Text("Consumed: $it", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                                 }
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                // Integrated Macro Badges
+                                // Core Macros
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -263,26 +273,68 @@ fun HistoryMealCard(meal: MealHistoryItem) {
                                     MacroBadgeItem(weightModifier, "Carb", food.totalCarbs ?: "-", "totalCarbs", Color(0xFF2196F3))
                                     MacroBadgeItem(weightModifier, "Fat", food.totalFat ?: "-", "totalFat", Color(0xFFFFEB3B))
                                 }
+
+                                // Secondary Macros (Sat Fat, Unsat Fat, Water)
+                                if (food.saturatedFat != null || food.unsaturatedFat != null || food.totalWater != null) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        val weightModifier = Modifier.weight(1f)
+                                        if (food.saturatedFat != null) MacroBadgeItem(weightModifier, "Sat Fat", food.saturatedFat, "saturatedFat", Color(0xFFCFD8DC))
+                                        if (food.unsaturatedFat != null) MacroBadgeItem(weightModifier, "Unsat Fat", food.unsaturatedFat, "unsaturatedFat", Color(0xFF90A4AE))
+                                        if (food.totalWater != null) MacroBadgeItem(weightModifier, "Water", food.totalWater, "totalWater", Color(0xFF29B6F6))
+                                    }
+                                }
+
+                                // AI Insights
+                                if (food.aiInsights?.whyGood?.isNotEmpty() == true || food.aiInsights?.whyNot?.isNotEmpty() == true) {
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text("AI Insights", color = NutritionUiTokens.AccentColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    food.aiInsights.whyGood?.forEach { text ->
+                                        InsightRowItem(icon = Icons.Default.CheckCircle, color = Color(0xFF81C784), text = text)
+                                    }
+                                    food.aiInsights.whyNot?.forEach { text ->
+                                        InsightRowItem(icon = Icons.Default.Cancel, color = Color(0xFFE57373), text = text)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Collapsible Sections for Ingredients/Additives/Details
+                                if (!food.ingredients.isNullOrEmpty()) {
+                                    CollapsiblePanelSection("Ingredients", food.ingredients.joinToString(", "))
+                                }
+                                if (!food.chemicalsOrPreservatives.isNullOrEmpty()) {
+                                    CollapsiblePanelSection("Additives & Preservatives", food.chemicalsOrPreservatives.joinToString(", "), isThreat = true)
+                                }
+                                if (!food.otherNutrients.isNullOrEmpty()) {
+                                    val alternativeText = food.otherNutrients.joinToString(", ") { "${it.name} (${it.amount})" }
+                                    CollapsiblePanelSection("Micronutrients", alternativeText)
+                                }
                             }
                         }
                     }
 
-                    // Lazy loaded Images Array
+                    // Captured Images
                     if (!meal.imageUrls.isNullOrEmpty()) {
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Capture Evidence", color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("Captured Media", color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(12.dp))
 
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(meal.imageUrls) { url ->
                                 AsyncImage(
-                                    model = "http://YOUR_SERVER_IP$url",
+                                    model = "http://YOUR_SERVER_IP$url", // Adjust IP appropriately
                                     contentDescription = "Meal Image",
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier
                                         .size(100.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
                                 )
                             }
                         }
