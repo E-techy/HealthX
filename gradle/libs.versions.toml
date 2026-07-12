@@ -19,6 +19,7 @@ coil = "2.6.0"
 lifecycleViewmodelCompose = "2.6.1"
 navigationCompose = "2.8.7"
 cronetEmbedded = "143.7445.0"
+foundation = "1.11.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -52,6 +53,7 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 cronet-embedded = { group = "org.chromium.net", name = "cronet-embedded", version.ref = "cronetEmbedded" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 
 
 [plugins]

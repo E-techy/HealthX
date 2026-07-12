@@ -1,5 +1,6 @@
 package com.example.healthx.nutrition_manager
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +23,7 @@ import com.example.healthx.data.model.CreateGoalRequest
 import com.example.healthx.data.model.GoalTarget
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.platform.LocalLocale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,7 +38,7 @@ fun CreateGoalScreen(viewModel: NutritionViewModel) {
     var fatTarget by remember { mutableStateOf("") }
 
     // Date Management
-    val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val dateFormatter = SimpleDateFormat("yyyy-MM-dd", LocalLocale.current.platformLocale)
     val isoFormatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
