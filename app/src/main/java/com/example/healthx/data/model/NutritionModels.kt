@@ -84,3 +84,46 @@ data class MealHistoryItem(
     @SerializedName("foodItems") val foodItems: List<FoodItem>?,
     @SerializedName("imageUrls") val imageUrls: List<String>?
 )
+
+data class GoalsListResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("data") val data: List<NutritionGoal>?
+)
+
+data class SingleGoalResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("data") val data: NutritionGoal?
+)
+
+data class CreateGoalRequest(
+    @SerializedName("goalType") val goalType: String,
+    @SerializedName("targets") val targets: List<GoalTarget>,
+    @SerializedName("goalStartDate") val goalStartDate: String,
+    @SerializedName("goalEndDate") val goalEndDate: String
+)
+
+data class NutritionGoal(
+    @SerializedName("_id") val id: String,
+    @SerializedName("goalType") val goalType: String,
+    @SerializedName("isActive") val isActive: Boolean,
+    @SerializedName("goalStartDate") val goalStartDate: String,
+    @SerializedName("goalEndDate") val goalEndDate: String,
+    @SerializedName("targets") val targets: List<GoalTarget>,
+    @SerializedName("progressChart") val progressChart: List<DailyProgress>?
+)
+
+data class GoalTarget(
+    @SerializedName("nutrientName") val nutrientName: String,
+    @SerializedName("targetAmount") val targetAmount: String
+)
+
+data class DailyProgress(
+    @SerializedName("date") val date: String,
+    @SerializedName("nutrientProgress") val nutrientProgress: List<NutrientProgress>
+)
+
+data class NutrientProgress(
+    @SerializedName("nutrientName") val nutrientName: String,
+    @SerializedName("amountCompleted") val amountCompleted: String,
+    @SerializedName("isCompleted") val isCompleted: Boolean
+)
