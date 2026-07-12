@@ -327,8 +327,11 @@ fun HistoryMealCard(meal: MealHistoryItem) {
 
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(meal.imageUrls) { url ->
+                                val baseUrl = com.example.healthx.BuildConfig.BASE_URL.removeSuffix("/")
+                                val fullImageUrl = "$baseUrl$url"
+
                                 AsyncImage(
-                                    model = "http://YOUR_SERVER_IP$url", // Adjust IP appropriately
+                                    model = fullImageUrl,
                                     contentDescription = "Meal Image",
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier
