@@ -1,15 +1,20 @@
 package com.example.healthx.nutrition_manager
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -17,17 +22,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.healthx.data.model.MealHistoryItem
 import kotlinx.coroutines.launch
-import androidx.compose.material.icons.filled.ArrowBack // Added this line
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Search
 
 @Composable
 fun MealsHistoryScreen(viewModel: NutritionViewModel) {
@@ -114,21 +117,23 @@ fun MealsHistoryScreen(viewModel: NutritionViewModel) {
                 }
             } else if (viewModel.mealsHistoryList.value.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No meals found.", color = Color.Gray)
+                    Text("No meals found in history.", color = Color.Gray)
                 }
             } else {
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp), // Increased spacing for premium feel
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(viewModel.mealsHistoryList.value) { meal ->
                         HistoryMealCard(meal)
                     }
+                    item { Spacer(modifier = Modifier.height(24.dp)) } // Bottom padding
                 }
             }
         }
     }
 }
+
 @Composable
 fun FilterChipUI(label: String, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
@@ -148,50 +153,136 @@ fun FilterChipUI(label: String, isSelected: Boolean, onClick: () -> Unit) {
 @Composable
 fun HistoryMealCard(meal: MealHistoryItem) {
     var isExpanded by remember { mutableStateOf(false) }
+    val rotationState by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f, label = "rotation")
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { isExpanded = !isExpanded },
-        colors = CardDefaults.cardColors(containerColor = NutritionUiTokens.SurfaceDark),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(20.dp))
+            .clickable { isExpanded = !isExpanded },
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Basic Info (Always visible)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    text = meal.foodItems?.firstOrNull()?.foodName ?: "Unknown Meal",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-                if (meal.discarded) {
-                    Text("Discarded", color = Color(0xFFFF7B7B), style = MaterialTheme.typography.labelSmall)
+        Column(
+            modifier = Modifier
+                .background(NutritionUiTokens.CardGradient)
+                .padding(20.dp)
+        ) {
+            // --- HEADER INTERACTION ROW ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = meal.mealType ?: "Logged Meal",
+                        color = NutritionUiTokens.AccentColor,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = meal.foodItems?.firstOrNull()?.foodName ?: "Unknown Item",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = meal.date?.take(10) ?: "",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (meal.discarded) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFFF7B7B).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color(0xFFFF7B7B).copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("Discarded", color = Color(0xFFFF7B7B), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Icon(
+                        imageVector = Icons.Default.ExpandMore,
+                        contentDescription = "Expand",
+                        tint = Color.Gray,
+                        modifier = Modifier.rotate(rotationState)
+                    )
                 }
             }
-            Text(text = meal.date?.take(10) ?: "", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
 
-            // Expanded Info (Images load ONLY when this opens)
+            // --- COLLAPSIBLE CONTENT SYSTEM ---
             AnimatedVisibility(visible = isExpanded) {
                 Column(modifier = Modifier.padding(top = 16.dp)) {
-                    Divider(color = Color.DarkGray, modifier = Modifier.padding(bottom = 12.dp))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(bottom = 16.dp))
 
-                    meal.foodItems?.forEach { food ->
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("• ${food.foodName}", color = Color.LightGray)
-                            Text(food.totalCalories ?: "-", color = NutritionUiTokens.AccentColor)
+                    // Detailed Food Items List with Macro Badges
+                    if (!meal.foodItems.isNullOrEmpty()) {
+                        Text("Items Logged", color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        meal.foodItems.forEach { food ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                                    .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.03f), RoundedCornerShape(12.dp))
+                                    .padding(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(food.foodName ?: "Unknown", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                }
+                                food.amountTaken?.let {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(it, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Integrated Macro Badges
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val weightModifier = Modifier.weight(1f)
+                                    MacroBadgeItem(weightModifier, "Cal", food.totalCalories ?: "-", "totalCalories", Color(0xFFFFA500))
+                                    MacroBadgeItem(weightModifier, "Pro", food.totalProtein ?: "-", "totalProtein", Color(0xFF4CAF50))
+                                    MacroBadgeItem(weightModifier, "Carb", food.totalCarbs ?: "-", "totalCarbs", Color(0xFF2196F3))
+                                    MacroBadgeItem(weightModifier, "Fat", food.totalFat ?: "-", "totalFat", Color(0xFFFFEB3B))
+                                }
+                            }
                         }
                     }
 
-                    // Lazy load images from network only when expanded
+                    // Lazy loaded Images Array
                     if (!meal.imageUrls.isNullOrEmpty()) {
                         Spacer(modifier = Modifier.height(16.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Capture Evidence", color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(meal.imageUrls) { url ->
-                                // Note: In a real app, prepend your BASE_URL to this 'url' if the API returns a relative path
                                 AsyncImage(
                                     model = "http://YOUR_SERVER_IP$url",
                                     contentDescription = "Meal Image",
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.size(80.dp).clip(RoundedCornerShape(8.dp))
+                                    modifier = Modifier
+                                        .size(100.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
                                 )
                             }
                         }

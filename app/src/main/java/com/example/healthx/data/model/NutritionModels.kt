@@ -89,5 +89,8 @@ data class MealHistoryItem(
 data class FoodItemHistory(
     @SerializedName("foodName") val foodName: String?,
     @SerializedName("amountTaken") val amountTaken: String?,
-    @SerializedName("totalCalories") val totalCalories: String?
+    @SerializedName("totalCalories") val totalCalories: String?,
+    @SerializedName("totalProtein") val totalProtein: String?,
+    @SerializedName("totalCarbs") val totalCarbs: String?,
+    @SerializedName("totalFat") val totalFat: String?
 )

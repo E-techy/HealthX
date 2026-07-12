@@ -132,4 +132,5 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation("com.razorpay:checkout:1.6.38")
     implementation("com.google.zxing:core:3.5.2")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 }
