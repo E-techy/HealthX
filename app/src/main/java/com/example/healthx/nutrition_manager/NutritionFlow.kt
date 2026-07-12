@@ -21,6 +21,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 import java.io.File
 
 // --- Theme Colors ---
@@ -44,30 +45,78 @@ fun NutritionManagerApp(viewModel: NutritionViewModel) {
 }
 @Composable
 fun HomeScreen(viewModel: NutritionViewModel) {
-    Scaffold(
-        containerColor = DarkBackground,
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { viewModel.navigateTo(NutritionScreenState.Scanner) },
-                containerColor = AccentColor,
-                contentColor = Color.White
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = NutritionUiTokens.SurfaceDark,
+                drawerContentColor = Color.White
             ) {
-                // Fixed: Changed to a scanner-style icon
-                Icon(Icons.Default.CropFree, contentDescription = "Scan Meal")
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("HealthX Nutrition", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(16.dp))
+                HorizontalDivider(color = Color.DarkGray)
+
+                NavigationDrawerItem(
+                    label = { Text("Nutrition Goals", color = Color.White) },
+                    selected = false,
+                    onClick = { /* TODO: Navigate to Goals */ },
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+                NavigationDrawerItem(
+                    label = { Text("Nutrition Tracker", color = Color.White) },
+                    selected = false,
+                    onClick = { /* TODO: Navigate to Tracker */ },
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
+                NavigationDrawerItem(
+                    label = { Text("Meals History", color = Color.White) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        viewModel.navigateTo(NutritionScreenState.MealsHistory)
+                    },
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                )
             }
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text("Nutrition Manager", style = MaterialTheme.typography.headlineMedium, color = Color.White)
-            Text("Tap the scanner to log a meal", color = Color.Gray)
+    ) {
+        Scaffold(
+            containerColor = DarkBackground,
+            topBar = {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp).padding(top = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                    }
+                    Text("Dashboard", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                }
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = { viewModel.navigateTo(NutritionScreenState.Scanner) },
+                    containerColor = AccentColor,
+                    contentColor = Color.White
+                ) {
+                    Icon(Icons.Default.CropFree, contentDescription = "Scan Meal")
+                }
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("Nutrition Manager", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                Text("Tap the scanner to log a meal", color = Color.Gray)
+            }
         }
     }
 }
-
 @Composable
 fun ScannerScreen(viewModel: NutritionViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
