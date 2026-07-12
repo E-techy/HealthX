@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.healthx.data.local.SessionManager
 import com.example.healthx.data.model.AnalyzeNutritionResponse
+import com.example.healthx.data.model.MealHistoryItem
 import com.example.healthx.data.network.RetrofitClient
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -25,6 +26,7 @@ sealed class NutritionScreenState {
     object Loading : NutritionScreenState()
     data class Error(val message: String) : NutritionScreenState()
     data class Success(val data: AnalyzeNutritionResponse) : NutritionScreenState()
+    object MealsHistory : NutritionScreenState()
 }
 
 // CHANGED: Now extends AndroidViewModel to access Application context for SessionManager
@@ -124,6 +126,51 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
             } catch (e: Exception) {
                 Log.e(TAG, "Exception during meal analysis: ${e.message}", e)
                 navigateTo(NutritionScreenState.Error(e.message ?: "Network failure. Please try again."))
+            }
+        }
+    }
+    var mealsHistoryList = mutableStateOf<List<MealHistoryItem>>(emptyList())
+    var isFetchingHistory = mutableStateOf(false)
+
+    // Filter States
+    var searchMealId = mutableStateOf("")
+    var selectedDateFilter = mutableStateOf("Today") // "Today", "This Week", "This Month"
+    var selectedStatusFilter = mutableStateOf("All") // "All", "Active", "Discarded"
+
+    fun fetchMealsHistory() {
+        isFetchingHistory.value = true
+        viewModelScope.launch {
+            try {
+                val token = getAuthToken() ?: return@launch
+
+                // Map the status filter to the API's expected 'show' parameter
+                val showParam = when (selectedStatusFilter.value) {
+                    "Discarded" -> "discarded"
+                    "All" -> "all"
+                    else -> null // Defaults to active only
+                }
+
+                // Map the search query
+                val idQuery = searchMealId.value.takeIf { it.isNotBlank() }
+
+                // Date formatting logic would go here to pass "YYYY-MM-DD" if "Today" is selected.
+                // For this example, assuming the backend handles blank queries by returning recent items.
+
+                val response = RetrofitClient.nutritionApi.getMealsHistory(
+                    token = token,
+                    show = showParam,
+                    mealId = idQuery
+                )
+
+                if (response.isSuccessful) {
+                    mealsHistoryList.value = response.body()?.data ?: emptyList()
+                } else {
+                    Log.e("NutritionViewModel", "Failed to fetch history: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                Log.e("NutritionViewModel", "Error fetching history", e)
+            } finally {
+                isFetchingHistory.value = false
             }
         }
     }
