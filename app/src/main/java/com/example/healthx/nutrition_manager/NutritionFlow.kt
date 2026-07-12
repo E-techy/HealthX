@@ -41,9 +41,14 @@ fun NutritionManagerApp(viewModel: NutritionViewModel) {
             is NutritionScreenState.Success -> AnalyzedMealScreen(state.data, viewModel)
             is NutritionScreenState.MealsHistory -> MealsHistoryScreen(viewModel)
             is NutritionScreenState.Goals -> NutritionGoalsScreen(viewModel)
+
+            is NutritionScreenState.Goals -> NutritionGoalsScreen(viewModel)
+            is NutritionScreenState.CreateGoal -> CreateGoalScreen(viewModel) // ADD THIS
         }
     }
 }
+
+
 @Composable
 fun HomeScreen(viewModel: NutritionViewModel) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -63,7 +68,10 @@ fun HomeScreen(viewModel: NutritionViewModel) {
                 NavigationDrawerItem(
                     label = { Text("Nutrition Goals", color = Color.White) },
                     selected = false,
-                    onClick = { /* TODO: Navigate to Goals */ },
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        viewModel.navigateTo(NutritionScreenState.Goals) // <--- ADDED NAVIGATION
+                    },
                     colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
                 )
                 NavigationDrawerItem(

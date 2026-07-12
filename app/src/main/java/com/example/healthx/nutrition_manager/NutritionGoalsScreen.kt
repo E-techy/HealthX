@@ -54,7 +54,7 @@ fun NutritionGoalsScreen(viewModel: NutritionViewModel) {
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showCreateSheet = true },
+                onClick = { viewModel.navigateTo(NutritionScreenState.CreateGoal) }, // FIXED ROUTING
                 containerColor = NutritionUiTokens.AccentColor,
                 contentColor = NutritionUiTokens.DarkBackground
             ) {
