@@ -69,7 +69,6 @@ data class NutritionErrorResponse(
     @SerializedName("error") val error: String?
 )
 
-
 data class MealHistoryResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("data") val data: List<MealHistoryItem>?
@@ -81,16 +80,7 @@ data class MealHistoryItem(
     @SerializedName("date") val date: String?,
     @SerializedName("mealType") val mealType: String?,
     @SerializedName("discarded") val discarded: Boolean,
-    @SerializedName("foodItems") val foodItems: List<FoodItemHistory>?,
+    // FIXED: Use the full FoodItem model to capture all data
+    @SerializedName("foodItems") val foodItems: List<FoodItem>?,
     @SerializedName("imageUrls") val imageUrls: List<String>?
-)
-
-// A lighter version of the food item for the history list
-data class FoodItemHistory(
-    @SerializedName("foodName") val foodName: String?,
-    @SerializedName("amountTaken") val amountTaken: String?,
-    @SerializedName("totalCalories") val totalCalories: String?,
-    @SerializedName("totalProtein") val totalProtein: String?,
-    @SerializedName("totalCarbs") val totalCarbs: String?,
-    @SerializedName("totalFat") val totalFat: String?
 )
