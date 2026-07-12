@@ -20,6 +20,7 @@ import java.io.File
 
 // Defines exactly where the user is in the flow
 sealed class NutritionScreenState {
+    object Goals : NutritionScreenState()
     object Home : NutritionScreenState()
     object Scanner : NutritionScreenState()
     object AmountInput : NutritionScreenState()
@@ -175,3 +176,50 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 }
+
+// --- GOALS STATE ---
+var goalsList = mutableStateOf<List<NutritionGoal>>(emptyList())
+var isFetchingGoals = mutableStateOf(false)
+var selectedGoalFilter = mutableStateOf("Active") // "Active", "Expired", "All"
+
+fun fetchGoals() {
+    isFetchingGoals.value = true
+    viewModelScope.launch {
+        try {
+            val token = getAuthToken() ?: return@launch
+
+            val showParam = when (selectedGoalFilter.value) {
+                "Expired" -> "expired"
+                "All" -> "all"
+                else -> null // Active
+            }
+
+            val response = RetrofitClient.nutritionApi.getGoals(token, showParam)
+            if (response.isSuccessful) {
+                goalsList.value = response.body()?.data ?: emptyList()
+            } else {
+                Log.e(TAG, "Failed to fetch goals: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching goals", e)
+        } finally {
+            isFetchingGoals.value = false
+        }
+    }
+}
+
+fun createNewGoal(request: CreateGoalRequest, onSuccess: () -> Unit) {
+    viewModelScope.launch {
+        try {
+            val token = getAuthToken() ?: return@launch
+            val response = RetrofitClient.nutritionApi.createGoal(token, request)
+            if (response.isSuccessful) {
+                fetchGoals() // Refresh the list
+                onSuccess()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating goal", e)
+        }
+    }
+}
+

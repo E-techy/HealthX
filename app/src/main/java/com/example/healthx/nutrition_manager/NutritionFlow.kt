@@ -39,7 +39,8 @@ fun NutritionManagerApp(viewModel: NutritionViewModel) {
             is NutritionScreenState.Loading -> LoadingScreen()
             is NutritionScreenState.Error -> ErrorScreen(state.message, viewModel)
             is NutritionScreenState.Success -> AnalyzedMealScreen(state.data, viewModel)
-            is NutritionScreenState.MealsHistory -> MealsHistoryScreen(viewModel) // Add this line!
+            is NutritionScreenState.MealsHistory -> MealsHistoryScreen(viewModel)
+            is NutritionScreenState.Goals -> NutritionGoalsScreen(viewModel)
         }
     }
 }
