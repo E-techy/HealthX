@@ -37,6 +37,7 @@ fun HomeDrawerContent(
     onNavigateToScanner: () -> Unit,
     onNavigateToNutrition: () -> Unit,
     onNavigateToSubscriptions: () -> Unit,
+    onNavigateToDelegatedAccess: () -> Unit, // ADDED
     onSwitchAccountRequested: () -> Unit,
     onLogoutRequested: () -> Unit
 ) {
@@ -86,8 +87,11 @@ fun HomeDrawerContent(
             DrawerItem(icon = Icons.Default.CardMembership, label = "Subscriptions") {
                 coroutineScope.launch { drawerState.close() }; onNavigateToSubscriptions()
             }
+            // ADDED THE DELEGATED ACCESS BUTTON HERE
+            DrawerItem(icon = Icons.Default.Security, label = "Access Gateway") {
+                coroutineScope.launch { drawerState.close() }; onNavigateToDelegatedAccess()
+            }
 
-            // REMOVED THE IF STATEMENT - ALWAYS SHOW THIS BUTTON NOW
             DrawerItem(icon = Icons.Default.SwitchAccount, label = "Add / Switch Account") {
                 coroutineScope.launch { drawerState.close() }; onSwitchAccountRequested()
             }
@@ -104,6 +108,8 @@ fun HomeDrawerContent(
         }
     }
 }
+
+// ... rest of the file remains exactly the same (DrawerHeader, ProfileIcon, InitialsFallback, DrawerItem)
 
 @Composable
 private fun DrawerHeader(account: SavedAccount, subStatus: String, onShowQrClicked: () -> Unit) {

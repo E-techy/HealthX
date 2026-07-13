@@ -28,8 +28,9 @@ import com.example.healthx.ui.screens.launch.AccountSelectionViewModel
 import com.example.healthx.ui.screens.reminders.RemindersNavGraph
 import com.example.healthx.ui.screens.scanner.QRScannerScreen
 import com.example.healthx.ui.subscription.SubscriptionActivity
-// IMPORT THE NUTRITION ACTIVITY
 import com.example.healthx.nutrition_manager.NutritionActivity
+// IMPORT THE DELEGATED ACCESS ACTIVITY
+import com.example.healthx.shareable_data_manager.DelegatedAccessActivity
 import com.example.healthx.ui.theme.HealthXTheme
 import com.example.healthx.utils.LocalActiveAccount
 import com.google.firebase.FirebaseApp
@@ -96,21 +97,20 @@ class MainActivity : ComponentActivity() {
                             onNavigateToApiKeys = { /* ... */ },
                             onNavigateToAiChat = { mainNavController.navigate("ai_chat") },
                             onNavigateToReminders = { mainNavController.navigate("reminders") },
-
                             onNavigateToAlarmManager = {
                                 context.startActivity(Intent(context, com.example.healthx.alarm_manager.AlarmManagerActivity::class.java))
                             },
-
                             onNavigateToScanner = { mainNavController.navigate("scanner") },
                             onNavigateToSubscriptions = {
                                 context.startActivity(Intent(context, SubscriptionActivity::class.java))
                             },
-
-                            // ADDED: Launching the new Nutrition Activity
                             onNavigateToNutrition = {
                                 context.startActivity(Intent(context, NutritionActivity::class.java))
                             },
-
+                            // ADDED: Launching the Delegated Access Activity
+                            onNavigateToDelegatedAccess = {
+                                context.startActivity(Intent(context, DelegatedAccessActivity::class.java))
+                            },
                             onSwitchAccountRequested = { /* ... */ },
                             onLogoutRequested = { /* ... */ }
                         )
@@ -161,7 +161,6 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
-
 
     override fun onResume() {
         super.onResume()

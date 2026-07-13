@@ -44,6 +44,7 @@ fun HomeScreen(
     onNavigateToScanner: () -> Unit,
     onNavigateToSubscriptions: () -> Unit,
     onNavigateToNutrition: () -> Unit,
+    onNavigateToDelegatedAccess: () -> Unit, // ADDED
     onSwitchAccountRequested: () -> Unit,
     onLogoutRequested: () -> Unit
 ) {
@@ -78,6 +79,7 @@ fun HomeScreen(
                     onNavigateToScanner = onNavigateToScanner,
                     onNavigateToSubscriptions = onNavigateToSubscriptions,
                     onNavigateToNutrition = onNavigateToNutrition,
+                    onNavigateToDelegatedAccess = onNavigateToDelegatedAccess, // ADDED
 
                     // WIRED TO VIEWMODEL FOR INSTANT SESSION CLEARING
                     onSwitchAccountRequested = {
@@ -186,6 +188,7 @@ fun HomeScreen(
     }
 }
 
+// ... rest of the file remains exactly the same (ShareProfileFullScreenDialog, AnimatedWaveBackground)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareProfileFullScreenDialog(account: SavedAccount, onClose: () -> Unit) {
