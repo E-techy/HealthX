@@ -66,7 +66,12 @@
             android:theme="@style/Theme.HealthX"
             android:windowSoftInputMode="adjustResize" />
 
-
+        <activity
+            android:name=".shareable_data_manager.DelegatedAccessActivity"
+            android:exported="false"
+            android:label="Access Gateway"
+            android:theme="@style/Theme.HealthX"
+            android:windowSoftInputMode="adjustResize" />
 
         <service
             android:name=".notification_manager.HealthXMessagingService"
@@ -104,6 +109,7 @@
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
