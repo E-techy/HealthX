@@ -1,6 +1,7 @@
 package com.example.healthx.data.network
 
 import com.example.healthx.BuildConfig
+import com.example.healthx.shareable_data_manager.data.DelegatedAccessApi
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -38,4 +39,6 @@ object RetrofitClient {
     val homeApi: HomeApi by lazy { retrofit.create(HomeApi::class.java) }
     val settingsApi: SettingsApi by lazy { retrofit.create(SettingsApi::class.java) }
     val nutritionApi: NutritionApi by lazy { retrofit.create(NutritionApi::class.java) }
+
+    val delegatedAccessApi: DelegatedAccessApi by lazy { retrofit.create(DelegatedAccessApi::class.java) }
 }
