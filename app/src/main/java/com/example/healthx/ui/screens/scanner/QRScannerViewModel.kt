@@ -1,138 +1,135 @@
 package com.example.healthx.ui.screens.scanner
 
 import android.app.Application
-import android.util.Patterns
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.delay
+import com.example.healthx.data.local.SessionManager
+import com.example.healthx.data.network.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
-enum class ScanDataType { URL, JSON, TEXT }
-enum class ItemStatus { PENDING, LOADING, IMPORTED, ADDED }
+enum class ScanDataType {
+    TEXT, URL, JSON, SHARE_ACCESS // Added SHARE_ACCESS
+}
+
+enum class ItemStatus {
+    SCANNED, LOADING, IMPORTED, ADDED
+}
 
 data class ScannedItem(
-    val id: Int,
-    val type: ScanDataType,
+    val id: String = UUID.randomUUID().toString(),
     val rawData: String,
     val displayData: String,
-    val status: ItemStatus
+    val type: ScanDataType,
+    var status: ItemStatus = ItemStatus.SCANNED
 )
 
 class QRScannerViewModel(application: Application) : AndroidViewModel(application) {
 
-    // List of items added to the queue below the scanner
+    private val sessionManager = SessionManager(application)
+    private val delegatedApi = RetrofitClient.delegatedAccessApi
+
     private val _scannedItems = MutableStateFlow<List<ScannedItem>>(emptyList())
-    val scannedItems = _scannedItems.asStateFlow()
+    val scannedItems: StateFlow<List<ScannedItem>> = _scannedItems.asStateFlow()
 
-    // The current item currently detected in the camera (but not yet added to the list)
     private val _currentPendingScan = MutableStateFlow<String?>(null)
-    val currentPendingScan = _currentPendingScan.asStateFlow()
+    val currentPendingScan: StateFlow<String?> = _currentPendingScan.asStateFlow()
 
-    private val _currentScanType = MutableStateFlow(ScanDataType.TEXT)
-    val currentScanType = _currentScanType.asStateFlow()
+    private val _currentScanType = MutableStateFlow<ScanDataType>(ScanDataType.TEXT)
+    val currentScanType: StateFlow<ScanDataType> = _currentScanType.asStateFlow()
 
-    private var itemIdCounter = 1
+    // Status message for the UI (Success/Error toasts)
+    private val _scanMessage = MutableStateFlow<String?>(null)
+    val scanMessage: StateFlow<String?> = _scanMessage.asStateFlow()
 
-    /**
-     * Called by the camera analyzer or gallery picker when a barcode is found.
-     */
+    fun clearMessage() { _scanMessage.value = null }
+
     fun processScannedText(text: String) {
-        // Prevent flickering if it's the same QR code currently pending
-        if (_currentPendingScan.value == text) return
+        // Prevent re-processing the exact same code rapidly
+        if (text == _currentPendingScan.value) return
 
-        _currentPendingScan.value = text
-        _currentScanType.value = classifyData(text)
-    }
-
-    /**
-     * Classifies whether the string is a URL, JSON, or plain text.
-     */
-    private fun classifyData(text: String): ScanDataType {
-        if (Patterns.WEB_URL.matcher(text).matches()) {
-            return ScanDataType.URL
-        }
+        // 1. Check for Delegated Access Hash
         try {
-            // Try parsing as JSON Object or Array
-            if (text.trim().startsWith("{")) {
-                JSONObject(text)
-                return ScanDataType.JSON
-            } else if (text.trim().startsWith("[")) {
-                JSONArray(text)
-                return ScanDataType.JSON
+            val jsonObj = JSONObject(text)
+            if (jsonObj.has("category") && jsonObj.getString("category") == "SHARE_ACCESS") {
+                val hashId = jsonObj.getString("hash")
+                _currentPendingScan.value = hashId
+                _currentScanType.value = ScanDataType.SHARE_ACCESS
+                return
             }
-        } catch (e: Exception) {
-            // Not valid JSON
+        } catch (e: Exception) { /* Not a valid JSON or not our specific format, proceed normally */ }
+
+        // 2. Normal processing (URL, JSON, TEXT)
+        _currentPendingScan.value = text
+        _currentScanType.value = when {
+            text.startsWith("http://") || text.startsWith("https://") -> ScanDataType.URL
+            text.startsWith("{") || text.startsWith("[") -> ScanDataType.JSON
+            else -> ScanDataType.TEXT
         }
-        return ScanDataType.TEXT
     }
 
-    /**
-     * Called when the user clicks "Import" (for URLs) or "Add" (for JSON/Text)
-     */
-    fun onImportOrAddClicked() {
-        val rawText = _currentPendingScan.value ?: return
+    fun onActionClicked() {
+        val data = _currentPendingScan.value ?: return
         val type = _currentScanType.value
 
-        val newItem = ScannedItem(
-            id = itemIdCounter++,
-            type = type,
-            rawData = rawText,
-            displayData = formatData(rawText, type),
-            status = if (type == ScanDataType.URL) ItemStatus.LOADING else ItemStatus.ADDED
-        )
-
-        // Add to the list
-        _scannedItems.value = _scannedItems.value + newItem
-
-        // Clear the pending scan overlay
-        _currentPendingScan.value = null
-
-        // If it's a URL, simulate a download process
-        if (type == ScanDataType.URL) {
-            simulateDownload(newItem.id)
-        }
-    }
-
-    private fun simulateDownload(itemId: Int) {
-        viewModelScope.launch {
-            delay(2000) // Simulate network delay
-            _scannedItems.value = _scannedItems.value.map { item ->
-                if (item.id == itemId) item.copy(status = ItemStatus.IMPORTED) else item
-            }
-        }
-    }
-
-    /**
-     * A dummy formatter script for JSON payloads.
-     */
-    private fun formatData(text: String, type: ScanDataType): String {
-        return if (type == ScanDataType.JSON) {
-            try {
-                // Prettify the JSON for the UI
-                JSONObject(text).toString(4)
-            } catch (e: Exception) {
-                text
-            }
+        if (type == ScanDataType.SHARE_ACCESS) {
+            connectWithFriendHash(data)
+            // Clear the overlay immediately after clicking
+            _currentPendingScan.value = null
         } else {
-            text
+            // Add normal scanned item to the list
+            val newItem = ScannedItem(
+                rawData = data,
+                displayData = if (data.length > 50) data.take(50) + "..." else data,
+                type = type
+            )
+            _scannedItems.value = _scannedItems.value + newItem
+            _currentPendingScan.value = null // Clear overlay
         }
     }
 
-    fun deleteItem(id: Int) {
+    private fun connectWithFriendHash(hashId: String) {
+        viewModelScope.launch {
+            val token = sessionManager.activeAccountFlow.firstOrNull()?.token
+            if (token == null) {
+                _scanMessage.value = "Authentication error. Please log in again."
+                return@launch
+            }
+
+            try {
+                val response = delegatedApi.connectWithHash("Bearer $token", hashId)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    _scanMessage.value = "Success! You are now connected."
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    val errorMsg = try {
+                        JSONObject(errorBody!!).getString("message")
+                    } catch (e: Exception) { "Failed to connect." }
+                    _scanMessage.value = errorMsg
+                }
+            } catch (e: Exception) {
+                _scanMessage.value = "Network error while connecting."
+                Log.e("QRScannerViewModel", "Connect error", e)
+            }
+        }
+    }
+
+    fun deleteItem(id: String) {
         _scannedItems.value = _scannedItems.value.filter { it.id != id }
+    }
+
+    fun saveAllItems() {
+        // Implementation for saving normal text/URL/JSON items locally
+        _scannedItems.value = emptyList()
     }
 
     fun clearPendingScan() {
         _currentPendingScan.value = null
-    }
-
-    fun saveAllItems() {
-        // TODO: Send data to Reminders Screen or local database
-        _scannedItems.value = emptyList() // Clear the list after saving
-        itemIdCounter = 1
     }
 }
