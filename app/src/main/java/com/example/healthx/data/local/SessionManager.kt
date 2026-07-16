@@ -1,14 +1,15 @@
 package com.example.healthx.data.local
 
 import android.content.Context
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 
 val Context.dataStore by preferencesDataStore(name = "healthx_auth_prefs")
@@ -100,5 +101,26 @@ class SessionManager(private val context: Context) {
 
     suspend fun updateLastSyncTime(timestamp: Long = System.currentTimeMillis()) {
         context.dataStore.edit { it[LAST_SYNC_TIME_KEY] = timestamp }
+    }
+
+    private val _delegatedSession = MutableStateFlow<DelegatedSession?>(null)
+    val delegatedSessionFlow: StateFlow<DelegatedSession?> = _delegatedSession.asStateFlow()
+
+    // Boolean flag to easily check if the app is currently in Guest Mode
+    val isGuestModeFlow: Flow<Boolean> = _delegatedSession.map { it != null }
+
+    // Activate Delegated Mode
+    fun enterDelegatedMode(session: DelegatedSession) {
+        _delegatedSession.value = session
+    }
+
+    // Revert to Normal Mode
+    fun exitDelegatedMode() {
+        _delegatedSession.value = null
+    }
+
+    // Synchronous getter for Retrofit Interceptors
+    fun currentDelegatedUserId(): String? {
+        return _delegatedSession.value?.targetUserId
     }
 }
