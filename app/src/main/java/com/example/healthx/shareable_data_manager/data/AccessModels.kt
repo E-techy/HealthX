@@ -9,20 +9,15 @@ data class StandardResponse<T>(
     @SerializedName("data") val data: T?
 )
 
-// Standard Error Response for 4xx/5xx handling
+// Standard Error Response
 data class ErrorResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("message") val message: String
 )
 
-// Hash Models
-data class CreateHashRequest(
-    @SerializedName("actions") val actions: List<String>
-)
-
-data class UpdateHashStatusRequest(
-    @SerializedName("status") val status: String // "ACTIVE" or "UNACTIVE"
-)
+// Phase 1: Hash Models
+data class CreateHashRequest(@SerializedName("actions") val actions: List<String>)
+data class UpdateHashStatusRequest(@SerializedName("status") val status: String)
 
 data class ShareableHash(
     @SerializedName("_id") val id: String,
@@ -33,17 +28,10 @@ data class ShareableHash(
     @SerializedName("createdAt") val createdAt: String
 )
 
-// Blocklist Model
-data class BlocklistedUser(
-    @SerializedName("userId") val userId: String,
-    @SerializedName("name") val name: String,
-    @SerializedName("profileImageUri") val profileImageUri: String?
-)
-
-// Received Access Models (Users I can view)
+// Phase 2 & 3: Connection & Access Models
 data class ActivePermission(
-    @SerializedName("action") val action: String,
-    @SerializedName("isActive") val isActive: Boolean
+    @SerializedName("action") var action: String,
+    @SerializedName("isActive") var isActive: Boolean
 )
 
 data class ReceivedAccessProfile(
@@ -52,8 +40,33 @@ data class ReceivedAccessProfile(
     @SerializedName("profileImageUri") val profileImageUri: String?
 )
 
+// People whose data I can see (User B)
 data class ReceivedAccessItem(
     @SerializedName("user") val user: ReceivedAccessProfile,
     @SerializedName("activePermissions") val activePermissions: List<ActivePermission>,
     @SerializedName("connectedAt") val connectedAt: String
+)
+
+// People who can see MY data (User A)
+data class GrantedAccessItem(
+    @SerializedName("friendshipId") val friendshipId: String,
+    @SerializedName("user") val user: ReceivedAccessProfile,
+    @SerializedName("permissions") val permissions: List<ActivePermission>,
+    @SerializedName("connectedAt") val connectedAt: String
+)
+
+data class UpdatePermissionsRequest(
+    @SerializedName("permissions") val permissions: List<ActivePermission>
+)
+
+data class BlockUserRequest(
+    @SerializedName("reason") val reason: String,
+    @SerializedName("notes") val notes: String = ""
+)
+
+// Blocklist Model
+data class BlocklistedUser(
+    @SerializedName("userId") val userId: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("profileImageUri") val profileImageUri: String?
 )
