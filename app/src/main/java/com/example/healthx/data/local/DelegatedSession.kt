@@ -6,7 +6,7 @@ data class DelegatedSession(
     val profilePhotoUrl: String?,
     val activePermissions: List<String>
 ) {
-    // Helper to instantly check if an action is allowed
+    // Helper to instantly check if an action is allowed across the UI
     fun hasPermission(action: String): Boolean {
         return activePermissions.contains("ALL") || activePermissions.contains(action)
     }
