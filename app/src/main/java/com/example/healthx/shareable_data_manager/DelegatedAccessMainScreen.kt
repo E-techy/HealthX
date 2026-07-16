@@ -10,10 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.People
-import androidx.compose.material.icons.outlined.QrCode
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,27 +20,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.healthx.data.local.DelegatedSession
 import com.example.healthx.data.local.SavedAccount
-import com.example.healthx.shareable_data_manager.data.AccessPermissions
-import com.example.healthx.shareable_data_manager.data.BlocklistedUser
-import com.example.healthx.shareable_data_manager.data.ShareableHash
+import com.example.healthx.shareable_data_manager.data.*
 import com.example.healthx.utils.QRGenerator
 import com.google.gson.Gson
 import kotlinx.coroutines.launch
-import com.example.healthx.data.local.DelegatedSession
-import com.example.healthx.shareable_data_manager.data.ReceivedAccessItem
 
 enum class CurrentScreen {
     QR_GENERATOR,
     ACTIVE_LINKS,
-    BLOCKLIST,
-
-    MY_ACCESS
+    GRANTED_ACCESS, // People who can see my data
+    RECEIVED_ACCESS, // People whose data I can see
+    BLOCKLIST
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,61 +51,43 @@ fun DelegatedAccessMainScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var currentScreen by remember { mutableStateOf(CurrentScreen.QR_GENERATOR) }
+    var currentScreen by remember { mutableStateOf(CurrentScreen.GRANTED_ACCESS) }
+    val actionState by viewModel.actionState.collectAsState()
+
+    // Global Action SnackBar Handler
+    LaunchedEffect(actionState) {
+        if (actionState is UiState.Success) {
+            snackbarHostState.showSnackbar((actionState as UiState.Success).data)
+            viewModel.resetActionState()
+        } else if (actionState is UiState.Error) {
+            snackbarHostState.showSnackbar((actionState as UiState.Error).message)
+            viewModel.resetActionState()
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = Color(0xFF141414),
-                modifier = Modifier.width(300.dp)
-            ) {
+            ModalDrawerSheet(drawerContainerColor = Color(0xFF141414), modifier = Modifier.width(300.dp)) {
                 Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    "Data Sharing",
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 16.dp, bottom = 16.dp)
-                )
+                Text("Access Gateway", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, bottom = 16.dp))
                 Divider(color = Color(0xFF2C2C2C))
 
-                DrawerMenuButton(
-                    icon = Icons.Outlined.QrCode,
-                    label = "My QR Code",
-                    isSelected = currentScreen == CurrentScreen.QR_GENERATOR
-                ) {
-                    currentScreen = CurrentScreen.QR_GENERATOR
-                    scope.launch { drawerState.close() }
+                DrawerMenuButton(icon = Icons.Outlined.Security, label = "Who Has Access", isSelected = currentScreen == CurrentScreen.GRANTED_ACCESS) {
+                    currentScreen = CurrentScreen.GRANTED_ACCESS; viewModel.fetchGrantedAccess(account.token); scope.launch { drawerState.close() }
                 }
-
-                DrawerMenuButton(
-                    icon = Icons.Outlined.Link,
-                    label = "Active Shared Links",
-                    isSelected = currentScreen == CurrentScreen.ACTIVE_LINKS
-                ) {
-                    currentScreen = CurrentScreen.ACTIVE_LINKS
-                    viewModel.fetchMyHashes(account.token)
-                    scope.launch { drawerState.close() }
+                DrawerMenuButton(icon = Icons.Outlined.People, label = "Profiles I Can View", isSelected = currentScreen == CurrentScreen.RECEIVED_ACCESS) {
+                    currentScreen = CurrentScreen.RECEIVED_ACCESS; viewModel.fetchReceivedAccess(account.token); scope.launch { drawerState.close() }
                 }
-
-                DrawerMenuButton(
-                    icon = Icons.Outlined.Block,
-                    label = "Blocked Users",
-                    isSelected = currentScreen == CurrentScreen.BLOCKLIST
-                ) {
-                    currentScreen = CurrentScreen.BLOCKLIST
-                    viewModel.fetchBlocklist(account.token)
-                    scope.launch { drawerState.close() }
+                Divider(color = Color(0xFF2C2C2C), modifier = Modifier.padding(vertical = 8.dp))
+                DrawerMenuButton(icon = Icons.Outlined.QrCode, label = "Generate QR Code", isSelected = currentScreen == CurrentScreen.QR_GENERATOR) {
+                    currentScreen = CurrentScreen.QR_GENERATOR; scope.launch { drawerState.close() }
                 }
-                DrawerMenuButton(
-                    icon = Icons.Outlined.People,
-                    label = "Accessible Profiles",
-                    isSelected = currentScreen == CurrentScreen.MY_ACCESS
-                ) {
-                    currentScreen = CurrentScreen.MY_ACCESS
-                    viewModel.fetchReceivedAccess(account.token)
-                    scope.launch { drawerState.close() }
+                DrawerMenuButton(icon = Icons.Outlined.Link, label = "Manage Active Links", isSelected = currentScreen == CurrentScreen.ACTIVE_LINKS) {
+                    currentScreen = CurrentScreen.ACTIVE_LINKS; viewModel.fetchMyHashes(account.token); scope.launch { drawerState.close() }
+                }
+                DrawerMenuButton(icon = Icons.Outlined.Block, label = "Blocked Users", isSelected = currentScreen == CurrentScreen.BLOCKLIST) {
+                    currentScreen = CurrentScreen.BLOCKLIST; viewModel.fetchBlocklist(account.token); scope.launch { drawerState.close() }
                 }
             }
         }
@@ -124,22 +99,16 @@ fun DelegatedAccessMainScreen(
                     title = {
                         Text(
                             when(currentScreen) {
-                                CurrentScreen.QR_GENERATOR -> "Share Data"
-                                CurrentScreen.ACTIVE_LINKS -> "Manage Links"
-                                CurrentScreen.MY_ACCESS -> "Accessible Profiles" // ADDED
+                                CurrentScreen.GRANTED_ACCESS -> "Who Has Access"
+                                CurrentScreen.RECEIVED_ACCESS -> "Profiles I Can View"
+                                CurrentScreen.QR_GENERATOR -> "Share Access"
+                                CurrentScreen.ACTIVE_LINKS -> "Active Links"
                                 CurrentScreen.BLOCKLIST -> "Blocked Users"
-                            },
-                            color = Color.White
+                            }, color = Color.White
                         )
                     },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
-                    },
-                    actions = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
-                        }
-                    },
+                    navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, tint = Color.White, contentDescription = null) } },
+                    actions = { IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, tint = Color.White, contentDescription = null) } },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0F1A24))
                 )
             },
@@ -147,16 +116,16 @@ fun DelegatedAccessMainScreen(
         ) { innerPadding ->
             Box(modifier = Modifier.padding(innerPadding)) {
                 when (currentScreen) {
+                    CurrentScreen.GRANTED_ACCESS -> GrantedAccessScreen(account.token, viewModel)
+                    CurrentScreen.RECEIVED_ACCESS -> ReceivedAccessScreen(account.token, viewModel, onEnterGuestMode)
                     CurrentScreen.QR_GENERATOR -> QRCodeGeneratorScreen(account, viewModel, snackbarHostState)
                     CurrentScreen.ACTIVE_LINKS -> ActiveLinksScreen(account.token, viewModel)
                     CurrentScreen.BLOCKLIST -> BlocklistScreen(account.token, viewModel)
-                    CurrentScreen.MY_ACCESS -> ReceivedAccessScreen(account.token, viewModel, onEnterGuestMode) // ADDED
                 }
             }
         }
     }
 }
-
 @Composable
 fun DrawerMenuButton(icon: ImageVector, label: String, isSelected: Boolean, onClick: () -> Unit) {
     NavigationDrawerItem(
@@ -480,47 +449,137 @@ fun PermissionsBottomSheet(
         }
     }
 }
-
-// ADD THE NEW SCREEN COMPOSABLE
+// -------------------------------------------------------------
+// GRANTED ACCESS (USER A: People who can see my data)
+// -------------------------------------------------------------
 @Composable
-fun ReceivedAccessScreen(
-    token: String,
-    viewModel: DelegatedAccessViewModel,
-    onEnterGuestMode: (DelegatedSession) -> Unit
-) {
-    val receivedState by viewModel.receivedAccessState.collectAsState()
+fun GrantedAccessScreen(token: String, viewModel: DelegatedAccessViewModel) {
+    val grantedState by viewModel.grantedAccessState.collectAsState()
+    var selectedUserForEdit by remember { mutableStateOf<GrantedAccessItem?>(null) }
+    var selectedUserForBlock by remember { mutableStateOf<GrantedAccessItem?>(null) }
 
-    LaunchedEffect(Unit) {
-        if (receivedState is UiState.Idle) viewModel.fetchReceivedAccess(token)
-    }
+    LaunchedEffect(Unit) { if (grantedState is UiState.Idle) viewModel.fetchGrantedAccess(token) }
 
-    when (val state = receivedState) {
+    when (val state = grantedState) {
         is UiState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         is UiState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(state.message, color = Color.Red) }
         is UiState.Success -> {
-            val items = state.data
-            if (items.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("You don't have access to anyone's data.", color = Color.Gray)
-                }
+            if (state.data.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No one has access to your data.", color = Color.Gray) }
             } else {
                 LazyColumn(contentPadding = PaddingValues(16.dp)) {
-                    items(items) { item ->
-                        ReceivedAccessCard(item = item, onAccessData = {
-                            val activeStrings = item.activePermissions.filter { it.isActive }.map { it.action }
-                            val session = DelegatedSession(
-                                targetUserId = item.user.userId,
-                                name = item.user.name,
-                                profilePhotoUrl = item.user.profileImageUri,
-                                activePermissions = activeStrings
-                            )
-                            onEnterGuestMode(session)
-                        })
+                    items(state.data) { item ->
+                        GrantedAccessCard(
+                            item = item,
+                            onEditClick = { selectedUserForEdit = item },
+                            onBlockClick = { selectedUserForBlock = item }
+                        )
                     }
                 }
             }
         }
         else -> {}
+    }
+
+    if (selectedUserForEdit != null) {
+        EditPermissionsSheet(
+            item = selectedUserForEdit!!,
+            onDismiss = { selectedUserForEdit = null },
+            onSave = { updatedPermissions ->
+                viewModel.updatePermissions(token, selectedUserForEdit!!.user.userId, updatedPermissions)
+                selectedUserForEdit = null
+            }
+        )
+    }
+
+    if (selectedUserForBlock != null) {
+        BlockUserDialog(
+            user = selectedUserForBlock!!.user,
+            onDismiss = { selectedUserForBlock = null },
+            onBlock = { reason, notes ->
+                viewModel.blockUser(token, selectedUserForBlock!!.user.userId, reason, notes)
+                selectedUserForBlock = null
+            }
+        )
+    }
+}
+
+@Composable
+fun GrantedAccessCard(item: GrantedAccessItem, onEditClick: () -> Unit, onBlockClick: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF2C2C2C)), contentAlignment = Alignment.Center) {
+                        Text(item.user.name.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(item.user.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text("Connected: ${item.connectedAt.take(10)}", color = Color.Gray, fontSize = 12.sp)
+                    }
+                }
+                IconButton(onClick = onBlockClick) { Icon(Icons.Outlined.Block, tint = Color(0xFFE53935), contentDescription = "Block") }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(onClick = onEditClick, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))) {
+                Text("Manage Permissions", color = Color.White)
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// RECEIVED ACCESS (USER B: Profiles I can View)
+// -------------------------------------------------------------
+@Composable
+fun ReceivedAccessScreen(token: String, viewModel: DelegatedAccessViewModel, onEnterGuestMode: (DelegatedSession) -> Unit) {
+    val receivedState by viewModel.receivedAccessState.collectAsState()
+    var showConnectDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { if (receivedState is UiState.Idle) viewModel.fetchReceivedAccess(token) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (val state = receivedState) {
+            is UiState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            is UiState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(state.message, color = Color.Red) }
+            is UiState.Success -> {
+                if (state.data.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("You don't have access to anyone's data.", color = Color.Gray) }
+                } else {
+                    LazyColumn(contentPadding = PaddingValues(16.dp)) {
+                        items(state.data) { item ->
+                            ReceivedAccessCard(item = item, onAccessData = {
+                                val activeStrings = item.activePermissions.filter { it.isActive }.map { it.action }
+                                onEnterGuestMode(DelegatedSession(item.user.userId, item.user.name, item.user.profileImageUri, activeStrings))
+                            })
+                        }
+                    }
+                }
+            }
+            else -> {}
+        }
+
+        // FAB to Connect using a Hash
+        FloatingActionButton(
+            onClick = { showConnectDialog = true },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+            containerColor = Color(0xFF00E676),
+            contentColor = Color.Black
+        ) {
+            Icon(Icons.Default.AddLink, contentDescription = "Connect via Hash")
+        }
+    }
+
+    if (showConnectDialog) {
+        ConnectHashDialog(
+            onDismiss = { showConnectDialog = false },
+            onConnect = { hashId -> viewModel.connectWithHash(token, hashId); showConnectDialog = false }
+        )
     }
 }
 
@@ -533,43 +592,113 @@ fun ReceivedAccessCard(item: ReceivedAccessItem, onAccessData: () -> Unit) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Profile Avatar
                 Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(Color(0xFF2C2C2C)), contentAlignment = Alignment.Center) {
-                    if (item.user.profileImageUri != null) {
-                        AsyncImage(model = item.user.profileImageUri, contentDescription = "Profile", modifier = Modifier.fillMaxSize())
-                    } else {
-                        Text(item.user.name.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    }
+                    Text(item.user.name.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text(text = item.user.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text(text = "Connected: ${item.connectedAt.take(10)}", color = Color.Gray, fontSize = 12.sp)
+                    Text(item.user.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("Connected: ${item.connectedAt.take(10)}", color = Color.Gray, fontSize = 12.sp)
                 }
             }
-
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Permissions Granted:", color = Color.LightGray, fontSize = 14.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Permissions Chips
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item.activePermissions.filter { it.isActive }.forEach { perm ->
-                    Surface(color = Color(0xFF1E88E5).copy(alpha = 0.2f), shape = RoundedCornerShape(8.dp)) {
-                        Text(perm.action, color = Color(0xFF64B5F6), fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = onAccessData,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
-                shape = RoundedCornerShape(8.dp)
-            ) {
+            Button(onClick = onAccessData, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676))) {
                 Text("Access Data", color = Color.Black, fontWeight = FontWeight.Bold)
             }
         }
     }
+}
+
+// -------------------------------------------------------------
+// DIALOGS & BOTTOM SHEETS
+// -------------------------------------------------------------
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditPermissionsSheet(item: GrantedAccessItem, onDismiss: () -> Unit, onSave: (List<ActivePermission>) -> Unit) {
+    // Make a deep copy for the UI to edit
+    val editablePermissions = remember { mutableStateListOf<ActivePermission>().apply { addAll(item.permissions.map { it.copy() }) } }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF1A1A2E)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+            Text("Edit Permissions for ${item.user.name}", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+            LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                items(editablePermissions.size) { index ->
+                    val perm = editablePermissions[index]
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(perm.action, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        Switch(
+                            checked = perm.isActive,
+                            onCheckedChange = { editablePermissions[index] = perm.copy(isActive = it) },
+                            colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFF1E88E5))
+                        )
+                    }
+                    Divider(color = Color(0xFF2A2A3E))
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = { onSave(editablePermissions) }, modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676))
+            ) { Text("Save Changes", color = Color.Black, fontWeight = FontWeight.Bold) }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+fun BlockUserDialog(user: ReceivedAccessProfile, onDismiss: () -> Unit, onBlock: (String, String) -> Unit) {
+    var reason by remember { mutableStateOf("PRIVACY_CONCERN") }
+    var notes by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1E1E1E),
+        title = { Text("Block ${user.name}?", color = Color.White) },
+        text = {
+            Column {
+                Text("This will instantly revoke their access to your data. They will not be notified.", color = Color.LightGray, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = notes, onValueChange = { notes = it },
+                    label = { Text("Optional Notes") }, modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onBlock(reason, notes) }) { Text("Block & Revoke", color = Color.Red, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = Color.Gray) }
+        }
+    )
+}
+
+@Composable
+fun ConnectHashDialog(onDismiss: () -> Unit, onConnect: (String) -> Unit) {
+    var hashInput by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1E1E1E),
+        title = { Text("Connect Manually", color = Color.White) },
+        text = {
+            Column {
+                Text("Paste the 64-character hash ID shared by your friend.", color = Color.LightGray, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = hashInput, onValueChange = { hashInput = it },
+                    label = { Text("Hash ID") }, modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (hashInput.isNotBlank()) onConnect(hashInput.trim()) }) { Text("Connect", color = Color(0xFF00E676), fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Color.Gray) } }
+    )
 }
