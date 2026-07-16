@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,18 +35,23 @@ import com.example.healthx.shareable_data_manager.data.ShareableHash
 import com.example.healthx.utils.QRGenerator
 import com.google.gson.Gson
 import kotlinx.coroutines.launch
+import com.example.healthx.data.local.DelegatedSession
+import com.example.healthx.shareable_data_manager.data.ReceivedAccessItem
 
 enum class CurrentScreen {
     QR_GENERATOR,
     ACTIVE_LINKS,
-    BLOCKLIST
+    BLOCKLIST,
+
+    MY_ACCESS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DelegatedAccessMainScreen(
     account: SavedAccount,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onEnterGuestMode: (DelegatedSession) -> Unit
 ) {
     val viewModel: DelegatedAccessViewModel = viewModel()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -99,6 +105,15 @@ fun DelegatedAccessMainScreen(
                     viewModel.fetchBlocklist(account.token)
                     scope.launch { drawerState.close() }
                 }
+                DrawerMenuButton(
+                    icon = Icons.Outlined.People,
+                    label = "Accessible Profiles",
+                    isSelected = currentScreen == CurrentScreen.MY_ACCESS
+                ) {
+                    currentScreen = CurrentScreen.MY_ACCESS
+                    viewModel.fetchReceivedAccess(account.token)
+                    scope.launch { drawerState.close() }
+                }
             }
         }
     ) {
@@ -111,6 +126,7 @@ fun DelegatedAccessMainScreen(
                             when(currentScreen) {
                                 CurrentScreen.QR_GENERATOR -> "Share Data"
                                 CurrentScreen.ACTIVE_LINKS -> "Manage Links"
+                                CurrentScreen.MY_ACCESS -> "Accessible Profiles" // ADDED
                                 CurrentScreen.BLOCKLIST -> "Blocked Users"
                             },
                             color = Color.White
@@ -134,6 +150,7 @@ fun DelegatedAccessMainScreen(
                     CurrentScreen.QR_GENERATOR -> QRCodeGeneratorScreen(account, viewModel, snackbarHostState)
                     CurrentScreen.ACTIVE_LINKS -> ActiveLinksScreen(account.token, viewModel)
                     CurrentScreen.BLOCKLIST -> BlocklistScreen(account.token, viewModel)
+                    CurrentScreen.MY_ACCESS -> ReceivedAccessScreen(account.token, viewModel, onEnterGuestMode) // ADDED
                 }
             }
         }
@@ -460,6 +477,99 @@ fun PermissionsBottomSheet(
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+// ADD THE NEW SCREEN COMPOSABLE
+@Composable
+fun ReceivedAccessScreen(
+    token: String,
+    viewModel: DelegatedAccessViewModel,
+    onEnterGuestMode: (DelegatedSession) -> Unit
+) {
+    val receivedState by viewModel.receivedAccessState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        if (receivedState is UiState.Idle) viewModel.fetchReceivedAccess(token)
+    }
+
+    when (val state = receivedState) {
+        is UiState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        is UiState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(state.message, color = Color.Red) }
+        is UiState.Success -> {
+            val items = state.data
+            if (items.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("You don't have access to anyone's data.", color = Color.Gray)
+                }
+            } else {
+                LazyColumn(contentPadding = PaddingValues(16.dp)) {
+                    items(items) { item ->
+                        ReceivedAccessCard(item = item, onAccessData = {
+                            val activeStrings = item.activePermissions.filter { it.isActive }.map { it.action }
+                            val session = DelegatedSession(
+                                targetUserId = item.user.userId,
+                                name = item.user.name,
+                                profilePhotoUrl = item.user.profileImageUri,
+                                activePermissions = activeStrings
+                            )
+                            onEnterGuestMode(session)
+                        })
+                    }
+                }
+            }
+        }
+        else -> {}
+    }
+}
+
+@Composable
+fun ReceivedAccessCard(item: ReceivedAccessItem, onAccessData: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Profile Avatar
+                Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(Color(0xFF2C2C2C)), contentAlignment = Alignment.Center) {
+                    if (item.user.profileImageUri != null) {
+                        AsyncImage(model = item.user.profileImageUri, contentDescription = "Profile", modifier = Modifier.fillMaxSize())
+                    } else {
+                        Text(item.user.name.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(text = item.user.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Connected: ${item.connectedAt.take(10)}", color = Color.Gray, fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Permissions Granted:", color = Color.LightGray, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Permissions Chips
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item.activePermissions.filter { it.isActive }.forEach { perm ->
+                    Surface(color = Color(0xFF1E88E5).copy(alpha = 0.2f), shape = RoundedCornerShape(8.dp)) {
+                        Text(perm.action, color = Color(0xFF64B5F6), fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onAccessData,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Access Data", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }

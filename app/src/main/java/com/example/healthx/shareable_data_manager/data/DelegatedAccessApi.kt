@@ -41,4 +41,10 @@ interface DelegatedAccessApi {
         @Header("Authorization") token: String,
         @Path("blockedUserId") blockedUserId: String
     ): Response<StandardResponse<Unit>>
+
+    // --- Access Management ---
+    @GET("api/access/friends/received")
+    suspend fun getReceivedAccess(
+        @Header("Authorization") token: String
+    ): Response<StandardResponse<List<ReceivedAccessItem>>>
 }

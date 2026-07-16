@@ -9,7 +9,7 @@ import androidx.core.view.WindowCompat
 import com.example.healthx.data.local.SavedAccount
 import com.example.healthx.data.local.SessionManager
 import com.example.healthx.ui.theme.HealthXTheme
-
+import com.example.healthx.data.local.DelegatedSession
 class DelegatedAccessActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,7 +24,11 @@ class DelegatedAccessActivity : ComponentActivity() {
                 activeAccount?.let { account ->
                     DelegatedAccessMainScreen(
                         account = account,
-                        onBack = { finish() }
+                        onBack = { finish() },
+                        onEnterGuestMode = { delegatedSession ->
+                            sessionManager.enterDelegatedMode(delegatedSession)
+                            finish() // Returns to Home Screen seamlessly
+                        }
                     )
                 }
             }

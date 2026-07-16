@@ -12,6 +12,7 @@ import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.example.healthx.shareable_data_manager.data.ReceivedAccessItem
 
 sealed class UiState<out T> {
     object Idle : UiState<Nothing>()
@@ -35,6 +36,26 @@ class DelegatedAccessViewModel : ViewModel() {
     // Blocklist State
     private val _blocklistState = MutableStateFlow<UiState<List<BlocklistedUser>>>(UiState.Idle)
     val blocklistState: StateFlow<UiState<List<BlocklistedUser>>> = _blocklistState
+
+    private val _receivedAccessState = MutableStateFlow<UiState<List<ReceivedAccessItem>>>(UiState.Idle)
+    val receivedAccessState: StateFlow<UiState<List<ReceivedAccessItem>>> = _receivedAccessState
+
+
+    fun fetchReceivedAccess(token: String) {
+        _receivedAccessState.value = UiState.Loading
+        viewModelScope.launch {
+            try {
+                val response = api.getReceivedAccess("Bearer $token")
+                if (response.isSuccessful && response.body()?.success == true) {
+                    _receivedAccessState.value = UiState.Success(response.body()!!.data ?: emptyList())
+                } else {
+                    _receivedAccessState.value = UiState.Error(parseError(response.errorBody()?.string()))
+                }
+            } catch (e: Exception) {
+                _receivedAccessState.value = UiState.Error("Failed to load accessible profiles.")
+            }
+        }
+    }
 
     fun generateHash(token: String, selectedActions: List<String>) {
         if (selectedActions.isEmpty()) {

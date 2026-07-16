@@ -30,6 +30,8 @@ import com.example.healthx.qr_codes.ProfileQRBuilder
 import com.example.healthx.ui.screens.home.components.*
 import com.example.healthx.utils.QRGenerator
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import com.example.healthx.data.local.SessionManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +50,9 @@ fun HomeScreen(
     onSwitchAccountRequested: () -> Unit,
     onLogoutRequested: () -> Unit
 ) {
+    val context = LocalContext.current
+    val sessionManager = remember { SessionManager(context) }
+    val delegatedSession by sessionManager.delegatedSessionFlow.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
 
@@ -130,6 +135,16 @@ fun HomeScreen(
                         .padding(innerPadding),
                     contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
+
+                    if (delegatedSession != null) {
+                        item {
+                            DelegatedModeBanner(
+                                targetName = delegatedSession!!.name,
+                                onExit = { sessionManager.exitDelegatedMode() }
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
                     item {
                         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
                             Text(
@@ -177,6 +192,23 @@ fun HomeScreen(
                             onMeetingsClick = { /* TODO: Navigate to video calls screen */ }
                         )
                         Spacer(modifier = Modifier.height(32.dp))
+                    }
+
+                    item {
+                        Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
+                            Text(
+                                text = if (delegatedSession != null) "Viewing data for," else "Welcome back,",
+                                color = Color.Gray,
+                                fontSize = 16.sp
+                            )
+                            Text(
+                                text = delegatedSession?.name ?: account.name, // Swap name dynamically!
+                                color = if (delegatedSession != null) Color(0xFF00E676) else Color.White,
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -311,4 +343,32 @@ fun AnimatedWaveBackground(content: @Composable () -> Unit) {
     )
 
     Box(modifier = Modifier.fillMaxSize().background(brush)) { content() }
+}
+
+// THE BANNER COMPOSABLE
+@Composable
+fun DelegatedModeBanner(targetName: String, onExit: () -> Unit) {
+    Surface(
+        color = Color(0xFFE53935).copy(alpha = 0.15f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Delegated Access Active", color = Color(0xFFE53935), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("You are viewing $targetName's data.", color = Color.White, fontSize = 12.sp)
+            }
+            Button(
+                onClick = onExit,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Exit", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
 }
