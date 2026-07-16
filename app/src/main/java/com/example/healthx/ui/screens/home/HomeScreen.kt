@@ -136,64 +136,18 @@ fun HomeScreen(
                     contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
 
+                    // 1. THE DELEGATED GUEST BANNER
                     if (delegatedSession != null) {
                         item {
                             DelegatedModeBanner(
                                 targetName = delegatedSession!!.name,
                                 onExit = { sessionManager.exitDelegatedMode() }
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-                    item {
-                        Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
-                            Text(
-                                text = "Welcome back,",
-                                color = Color.Gray,
-                                fontSize = 16.sp
-                            )
-                            Text(
-                                text = account.name,
-                                color = Color.White,
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
 
-                    item {
-                        HealthStatsGrid(
-                            onHeartRateClick = { /* TODO: Route */ },
-                            onSpo2Click = { /* TODO: Route */ },
-                            onBpClick = { /* TODO: Route */ },
-                            onSleepClick = { /* TODO: Route */ }
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                    }
-
-                    item {
-                        HomeNutritionSection(
-                            onNutritionClick = { onNavigateToNutrition() }
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                    }
-
-                    item {
-                        HomeUpcomingAlarms(
-                            activeAlarms = activeAlarms,
-                            onOpenAlarmManager = onNavigateToAlarmManager
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                    }
-
-                    item {
-                        HomeMeetings(
-                            onMeetingsClick = { /* TODO: Navigate to video calls screen */ }
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                    }
-
+                    // 2. THE DYNAMIC GREETING
                     item {
                         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
                             Text(
@@ -209,6 +163,35 @@ fun HomeScreen(
                                 modifier = Modifier.padding(top = 4.dp)
                             )
                         }
+                    }
+
+                    // 3. YOUR EXISTING STATS & COMPONENTS
+                    item {
+                        HealthStatsGrid(
+                            onHeartRateClick = { /* TODO: Route */ },
+                            onSpo2Click = { /* TODO: Route */ },
+                            onBpClick = { /* TODO: Route */ },
+                            onSleepClick = { /* TODO: Route */ }
+                        )
+                        Spacer(modifier = Modifier.height(32.dp))
+                    }
+
+                    item {
+                        HomeNutritionSection(onNutritionClick = onNavigateToNutrition)
+                        Spacer(modifier = Modifier.height(32.dp))
+                    }
+
+                    item {
+                        HomeUpcomingAlarms(
+                            activeAlarms = activeAlarms,
+                            onOpenAlarmManager = onNavigateToAlarmManager
+                        )
+                        Spacer(modifier = Modifier.height(32.dp))
+                    }
+
+                    item {
+                        HomeMeetings(onMeetingsClick = { /* TODO */ })
+                        Spacer(modifier = Modifier.height(32.dp))
                     }
                 }
             }

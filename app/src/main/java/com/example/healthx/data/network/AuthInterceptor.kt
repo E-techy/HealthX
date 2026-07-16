@@ -17,7 +17,7 @@ class AuthInterceptor(private val sessionManager: SessionManager) : Interceptor 
             requestBuilder.addHeader("Authorization", "Bearer $token")
         }
 
-        // 2. Add Delegated Target ID if in guest mode
+        // ADD THIS: Inject Delegated ID into headers automatically
         val targetId = sessionManager.currentDelegatedUserId()
         if (targetId != null) {
             requestBuilder.addHeader("X-Target-User-Id", targetId)

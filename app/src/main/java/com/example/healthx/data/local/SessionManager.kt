@@ -109,7 +109,15 @@ class SessionManager(private val context: Context) {
     // DELEGATED ACCESS / GUEST MODE (IN-MEMORY)
     // ==========================================
 
-    private val _delegatedSession = MutableStateFlow<DelegatedSession?>(null)
+    companion object {
+        private val _delegatedSession = MutableStateFlow<DelegatedSession?>(null)
+
+        // STATIC GETTER: So RetrofitClient can read this without a Context instance
+        fun currentDelegatedUserIdStatic(): String? {
+            return _delegatedSession.value?.targetUserId
+        }
+    }
+
     val delegatedSessionFlow: StateFlow<DelegatedSession?> = _delegatedSession.asStateFlow()
 
     // Boolean flag to easily check if the app is currently in Guest Mode
@@ -125,7 +133,7 @@ class SessionManager(private val context: Context) {
         _delegatedSession.value = null
     }
 
-    // Synchronous getter for Retrofit Interceptors
+    // Legacy non-static getter (keep for compatibility)
     fun currentDelegatedUserId(): String? {
         return _delegatedSession.value?.targetUserId
     }
