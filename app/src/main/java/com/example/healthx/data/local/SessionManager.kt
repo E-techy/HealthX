@@ -1,7 +1,9 @@
 package com.example.healthx.data.local
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
@@ -26,7 +28,6 @@ data class SavedAccount(
     val initials: String
         get() = if (name.isNotBlank()) name.take(1).uppercase() else "?"
 }
-
 
 class SessionManager(private val context: Context) {
     private val gson = Gson()
@@ -69,6 +70,7 @@ class SessionManager(private val context: Context) {
             prefs[ACTIVE_ACCOUNT_ID_KEY] = accountId
         }
     }
+
     suspend fun removeAccount(accountId: String) {
         context.dataStore.edit { prefs ->
             val json = prefs[ACCOUNTS_KEY] ?: "[]"
@@ -102,6 +104,10 @@ class SessionManager(private val context: Context) {
     suspend fun updateLastSyncTime(timestamp: Long = System.currentTimeMillis()) {
         context.dataStore.edit { it[LAST_SYNC_TIME_KEY] = timestamp }
     }
+
+    // ==========================================
+    // DELEGATED ACCESS / GUEST MODE (IN-MEMORY)
+    // ==========================================
 
     private val _delegatedSession = MutableStateFlow<DelegatedSession?>(null)
     val delegatedSessionFlow: StateFlow<DelegatedSession?> = _delegatedSession.asStateFlow()
