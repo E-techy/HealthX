@@ -198,4 +198,27 @@ class DelegatedAccessViewModel : ViewModel() {
         return try { gson.fromJson(errorBody, ErrorResponse::class.java).message }
         catch (e: Exception) { "An unexpected server error occurred." }
     }
+
+    fun updateHashActions(token: String, hashId: String, actions: List<String>) {
+        Log.d(TAG, "📝 Updating permissions for hash: $hashId")
+        actionState.value = UiState.Loading
+        viewModelScope.launch {
+            try {
+                val response = api.updateHashActions("Bearer $token", hashId, UpdateHashActionsRequest(actions))
+                if (response.isSuccessful) {
+                    Log.d(TAG, "✅ Hash permissions updated successfully.")
+                    actionState.value = UiState.Success("Link permissions updated successfully.")
+                    fetchMyHashes(token) // Refresh the list
+                } else {
+                    val errorMsg = parseError(response.errorBody()?.string())
+                    Log.e(TAG, "❌ Failed to update hash permissions: $errorMsg")
+                    actionState.value = UiState.Error(errorMsg)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "💥 Network error updating hash permissions: ${e.message}", e)
+                actionState.value = UiState.Error("Network error updating link permissions.")
+            }
+        }
+    }
 }
+

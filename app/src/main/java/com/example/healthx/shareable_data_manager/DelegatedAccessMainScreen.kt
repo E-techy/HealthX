@@ -539,44 +539,215 @@ fun QRCodeGeneratorScreen(account: SavedAccount, viewModel: DelegatedAccessViewM
     if (showPermissionsSheet) PermissionsBottomSheet(onDismiss = { showPermissionsSheet = false }, onGenerateClicked = { selectedPermissions -> viewModel.generateHash(account.token, selectedPermissions) }, isLoading = generateState is UiState.Loading)
 }
 
+// ==========================================
+// 2. ACTIVE LINKS SCREEN (HASHES)
+// ==========================================
 @Composable
 fun ActiveLinksScreen(token: String, viewModel: DelegatedAccessViewModel) {
-    // Exact same implementation from previous code...
     val hashesState by viewModel.myHashesState.collectAsState()
+
+    // Dialog States
+    var selectedHashForQR by remember { mutableStateOf<ShareableHash?>(null) }
+    var selectedHashForEdit by remember { mutableStateOf<ShareableHash?>(null) }
+
     when (val state = hashesState) {
         is UiState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         is UiState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(state.message, color = Color.Red) }
         is UiState.Success -> {
             val hashes = state.data
-            if (hashes.isEmpty()) Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No active shared links found.", color = Color.Gray) }
-            else LazyColumn(contentPadding = PaddingValues(16.dp)) { items(hashes) { hash -> HashCard(hash = hash, onToggleStatus = { viewModel.toggleHashStatus(token, hash.hashId, hash.status) }, onDelete = { viewModel.deleteHash(token, hash.hashId) }) } }
+            if (hashes.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No active shared links found.", color = Color.Gray)
+                }
+            } else {
+                LazyColumn(contentPadding = PaddingValues(16.dp)) {
+                    items(hashes) { hash ->
+                        HashCard(
+                            hash = hash,
+                            onToggleStatus = { viewModel.toggleHashStatus(token, hash.hashId, hash.status) },
+                            onShowQr = { selectedHashForQR = hash },
+                            onEdit = { selectedHashForEdit = hash },
+                            onDelete = { viewModel.deleteHash(token, hash.hashId) }
+                        )
+                    }
+                }
+            }
         }
         else -> {}
     }
+
+    // Popups
+    if (selectedHashForQR != null) {
+        HashQrDialog(
+            hashId = selectedHashForQR!!.hashId,
+            onDismiss = { selectedHashForQR = null }
+        )
+    }
+
+    if (selectedHashForEdit != null) {
+        EditHashPermissionsSheet(
+            hash = selectedHashForEdit!!,
+            onDismiss = { selectedHashForEdit = null },
+            onSave = { updatedActions ->
+                viewModel.updateHashActions(token, selectedHashForEdit!!.hashId, updatedActions)
+                selectedHashForEdit = null
+            }
+        )
+    }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun HashCard(hash: ShareableHash, onToggleStatus: () -> Unit, onDelete: () -> Unit) {
-    // Exact same implementation...
+fun HashCard(hash: ShareableHash, onToggleStatus: () -> Unit, onShowQr: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
     val isActive = hash.status == "ACTIVE"
-    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(text = "ID: ${hash.hashId.take(8)}...", color = Color.White, fontWeight = FontWeight.Bold)
-                IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = Color(0xFFE53935)) }
+
+            // Header: ID and Action Buttons
+            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Link ID: ${hash.hashId.take(8).uppercase()}",
+                    color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IconButton(onClick = onShowQr, modifier = Modifier.size(36.dp).background(Color(0xFF2C2C2C), CircleShape)) {
+                        Icon(Icons.Default.QrCode, contentDescription = "Show QR", tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = onEdit, modifier = Modifier.size(36.dp).background(Color(0xFF2C2C2C), CircleShape)) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Permissions", tint = Color(0xFF1E88E5), modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = onDelete, modifier = Modifier.size(36.dp).background(Color(0xFF2C2C2C), CircleShape)) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = Color(0xFFE53935), modifier = Modifier.size(20.dp))
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Permissions attached to this link:", color = Color.Gray, fontSize = 12.sp)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Permissions granted:", color = Color.Gray, fontSize = 12.sp)
-            hash.actions.forEach { action -> Text("• ${getHumanReadablePermission(action)}", color = Color(0xFF64B5F6), fontSize = 14.sp) }
-            Spacer(modifier = Modifier.height(12.dp)); Divider(color = Color(0xFF2C2C2C)); Spacer(modifier = Modifier.height(8.dp))
+
+            // Action Chips Mapping
+            FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                hash.actions.forEach { action ->
+                    Surface(color = Color(0xFF1E88E5).copy(alpha = 0.2f), shape = RoundedCornerShape(8.dp)) {
+                        Text(
+                            text = getHumanReadablePermission(action),
+                            color = Color(0xFF64B5F6),
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Divider(color = Color(0xFF2C2C2C))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Footer: Status Toggle
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(if (isActive) "Link is Active" else "Link is Paused", color = if (isActive) Color(0xFF00E676) else Color.Gray)
-                Switch(checked = isActive, onCheckedChange = { onToggleStatus() }, colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFF1E88E5)))
+                Text(if (isActive) "Link is Active (Scannable)" else "Link is Paused", color = if (isActive) Color(0xFF00E676) else Color.Gray, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Switch(
+                    checked = isActive,
+                    onCheckedChange = { onToggleStatus() },
+                    colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFF1E88E5))
+                )
             }
         }
     }
 }
 
+// -------------------------------------------------------------
+// DIALOGS: Hash QR Viewer & Hash Permissions Editor
+// -------------------------------------------------------------
+@Composable
+fun HashQrDialog(hashId: String, onDismiss: () -> Unit) {
+    var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(hashId) {
+        val payload = Gson().toJson(mapOf("category" to "SHARE_ACCESS", "hash" to hashId))
+        qrBitmap = QRGenerator.generateQRCode(data = payload, size = 600)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1E1E1E),
+        title = { Text("Link QR Code", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text("Show this to your friend to instantly connect.", color = Color.LightGray, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(24.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(8.dp)
+                ) {
+                    if (qrBitmap != null) {
+                        Image(bitmap = qrBitmap!!.asImageBitmap(), contentDescription = "QR Code", modifier = Modifier.size(220.dp).padding(16.dp))
+                    } else {
+                        Box(modifier = Modifier.size(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close", color = Color(0xFF1E88E5), fontWeight = FontWeight.Bold) }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditHashPermissionsSheet(hash: ShareableHash, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
+    val selectedPermissions = remember {
+        mutableStateMapOf<String, Boolean>().apply {
+            AccessPermissions.availablePermissions.forEach { put(it.id, hash.actions.contains(it.id)) }
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF1A1A2E)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+            Text("Edit Link Permissions", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                items(AccessPermissions.availablePermissions) { permission ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                            Text(text = permission.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text(text = permission.description, color = Color.LightGray, fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked = selectedPermissions[permission.id] ?: false,
+                            onCheckedChange = { selectedPermissions[permission.id] = it },
+                            colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFF1E88E5))
+                        )
+                    }
+                    Divider(color = Color(0xFF2A2A3E))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = { onSave(selectedPermissions.filter { it.value }.keys.toList()) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp)
+            ) {
+                Text("Save Updates", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditPermissionsSheet(item: GrantedAccessItem, onDismiss: () -> Unit, onSave: (List<ActivePermission>) -> Unit) {
