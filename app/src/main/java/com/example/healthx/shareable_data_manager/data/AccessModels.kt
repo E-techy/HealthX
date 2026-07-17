@@ -70,3 +70,7 @@ data class BlocklistedUser(
     @SerializedName("name") val name: String,
     @SerializedName("profileImageUri") val profileImageUri: String?
 )
+
+data class UpdateHashActionsRequest(
+    @SerializedName("actions") val actions: List<String>
+)

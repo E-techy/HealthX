@@ -41,4 +41,14 @@ interface DelegatedAccessApi {
 
     @DELETE("api/access/blocklist/{blockedUserId}")
     suspend fun unblockUser(@Header("Authorization") token: String, @Path("blockedUserId") blockedUserId: String): Response<StandardResponse<Unit>>
+
+    @PATCH("api/access/hash/{hashId}/actions")
+    suspend fun updateHashActions(
+        @Header("Authorization") token: String,
+        @Path("hashId") hashId: String,
+        @Body request: UpdateHashActionsRequest
+    ): Response<StandardResponse<ShareableHash>>
 }
+
+
+
