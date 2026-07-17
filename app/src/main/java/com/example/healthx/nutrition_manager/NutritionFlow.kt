@@ -18,16 +18,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.healthx.data.local.SessionManager
 import kotlinx.coroutines.launch
 import java.io.File
 
 // --- Theme Colors ---
 val DarkBackground = Color(0xFF0D0D0D)
 val SurfaceDark = Color(0xFF1A1A1A)
-val AccentColor = Color(0xFF6200EE) // A deep cinematic purple/blue accent
+val AccentColor = Color(0xFF6200EE)
 
 @Composable
 fun NutritionManagerApp(viewModel: NutritionViewModel) {
@@ -41,16 +43,23 @@ fun NutritionManagerApp(viewModel: NutritionViewModel) {
             is NutritionScreenState.Success -> AnalyzedMealScreen(state.data, viewModel)
             is NutritionScreenState.MealsHistory -> MealsHistoryScreen(viewModel)
             is NutritionScreenState.Goals -> NutritionGoalsScreen(viewModel)
-
-            is NutritionScreenState.Goals -> NutritionGoalsScreen(viewModel)
-            is NutritionScreenState.CreateGoal -> CreateGoalScreen(viewModel) // ADD THIS
+            is NutritionScreenState.CreateGoal -> CreateGoalScreen(viewModel)
         }
     }
 }
 
-
 @Composable
 fun HomeScreen(viewModel: NutritionViewModel) {
+    val context = LocalContext.current
+    val sessionManager = remember { SessionManager(context) }
+    val delegatedSession by sessionManager.delegatedSessionFlow.collectAsState()
+
+    // PERMISSION CHECKS
+    val isGuest = delegatedSession != null
+    val canSeeNutrition = !isGuest || delegatedSession!!.hasPermission("SEE_NUTRITION")
+    val canEditNutrition = !isGuest || delegatedSession!!.hasPermission("EDIT_NUTRITION")
+    val canSeeGoals = !isGuest || delegatedSession!!.hasPermission("SEE_GOALS")
+
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -65,30 +74,41 @@ fun HomeScreen(viewModel: NutritionViewModel) {
                 Text("HealthX Nutrition", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(16.dp))
                 HorizontalDivider(color = Color.DarkGray)
 
-                NavigationDrawerItem(
-                    label = { Text("Nutrition Goals", color = Color.White) },
-                    selected = false,
-                    onClick = {
-                        scope.launch { drawerState.close() }
-                        viewModel.navigateTo(NutritionScreenState.Goals) // <--- ADDED NAVIGATION
-                    },
-                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
-                )
-                NavigationDrawerItem(
-                    label = { Text("Nutrition Tracker", color = Color.White) },
-                    selected = false,
-                    onClick = { /* TODO: Navigate to Tracker */ },
-                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
-                )
-                NavigationDrawerItem(
-                    label = { Text("Meals History", color = Color.White) },
-                    selected = false,
-                    onClick = {
-                        scope.launch { drawerState.close() }
-                        viewModel.navigateTo(NutritionScreenState.MealsHistory)
-                    },
-                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
-                )
+                if (canSeeGoals) {
+                    NavigationDrawerItem(
+                        label = { Text("Nutrition Goals", color = Color.White) },
+                        selected = false,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            viewModel.navigateTo(NutritionScreenState.Goals)
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                    )
+                }
+
+                if (canEditNutrition) {
+                    NavigationDrawerItem(
+                        label = { Text("Nutrition Tracker", color = Color.White) },
+                        selected = false,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            viewModel.navigateTo(NutritionScreenState.Scanner)
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                    )
+                }
+
+                if (canSeeNutrition) {
+                    NavigationDrawerItem(
+                        label = { Text("Meals History", color = Color.White) },
+                        selected = false,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            viewModel.navigateTo(NutritionScreenState.MealsHistory)
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                    )
+                }
             }
         }
     ) {
@@ -106,12 +126,15 @@ fun HomeScreen(viewModel: NutritionViewModel) {
                 }
             },
             floatingActionButton = {
-                FloatingActionButton(
-                    onClick = { viewModel.navigateTo(NutritionScreenState.Scanner) },
-                    containerColor = AccentColor,
-                    contentColor = Color.White
-                ) {
-                    Icon(Icons.Default.CropFree, contentDescription = "Scan Meal")
+                // HIDE THE SCANNER FAB IF THEY LACK EDIT PERMISSIONS
+                if (canEditNutrition) {
+                    FloatingActionButton(
+                        onClick = { viewModel.navigateTo(NutritionScreenState.Scanner) },
+                        containerColor = AccentColor,
+                        contentColor = Color.White
+                    ) {
+                        Icon(Icons.Default.CropFree, contentDescription = "Scan Meal")
+                    }
                 }
             }
         ) { padding ->
@@ -121,11 +144,16 @@ fun HomeScreen(viewModel: NutritionViewModel) {
                 verticalArrangement = Arrangement.Center
             ) {
                 Text("Nutrition Manager", style = MaterialTheme.typography.headlineMedium, color = Color.White)
-                Text("Tap the scanner to log a meal", color = Color.Gray)
+                if (canEditNutrition) {
+                    Text("Tap the scanner to log a meal", color = Color.Gray)
+                } else {
+                    Text("Read-Only Mode Active", color = Color(0xFFFFB74D), fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+                }
             }
         }
     }
 }
+
 @Composable
 fun ScannerScreen(viewModel: NutritionViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current

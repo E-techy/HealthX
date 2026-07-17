@@ -174,9 +174,17 @@ fun AnalyzedMealScreen(response: AnalyzeNutritionResponse, viewModel: NutritionV
     }
 }
 
+// ... inside AnalyzedMealScreen.kt ...
+
 @Composable
 fun FoodCard(food: FoodItem) {
     val context = LocalContext.current
+    val sessionManager = remember { com.example.healthx.data.local.SessionManager(context) }
+    val delegatedSession by sessionManager.delegatedSessionFlow.collectAsState()
+
+    val isGuest = delegatedSession != null
+    val canEditNutrition = !isGuest || delegatedSession!!.hasPermission("EDIT_NUTRITION")
+
     var isExpanded by remember { mutableStateOf(true) }
     val rotationState by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f, label = "rotation")
 
@@ -192,196 +200,75 @@ fun FoodCard(food: FoodItem) {
                 .background(NutritionUiTokens.CardGradient)
                 .padding(20.dp)
         ) {
-            // --- HEADER INTERACTION ROW ---
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    val (catColor, catIcon, _) = NutritionIconRegistry.getCategoryConfig(food.mealCategory)
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(catColor.copy(alpha = 0.15f), CircleShape)
-                            .border(1.dp, catColor.copy(alpha = 0.3f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(catIcon, contentDescription = null, tint = catColor, modifier = Modifier.size(20.dp))
-                    }
+            // ... (Keep the Header and Collapsible sections exactly the same until the buttons) ...
 
-                    Spacer(modifier = Modifier.width(14.dp))
-
-                    Text(
-                        text = food.foodName ?: "Unknown Entity",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    food.foodScore?.let { score ->
-                        Row(
-                            modifier = Modifier
-                                .background(Color.White.copy(alpha = 0.07f), RoundedCornerShape(10.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Star, contentDescription = "Score", tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(score.toString(), color = Color.White, fontWeight = FontWeight.ExtraBold)
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.Default.ExpandMore,
-                        contentDescription = "Collapse Details",
-                        tint = Color.Gray,
-                        modifier = Modifier.rotate(rotationState)
-                    )
-                }
+            // Product Details Box Factory
+            if (food.brandName != null || food.expiryDate != null || food.countryOfOrigin != null || food.nutritionValuePerUnit != null) {
+                val buildDetails = buildString {
+                    food.brandName?.let { append("Brand Label: $it\n") }
+                    food.nutritionValuePerUnit?.let { append("Metric Unit Base: $it\n") }
+                    food.countryOfOrigin?.let { append("Origin Domain: $it\n") }
+                    food.manufactureDate?.let { append("Production Date: $it\n") }
+                    food.expiryDate?.let { append("Terminal Lifecycle Date: $it") }
+                }.trim()
+                CollapsiblePanelSection("Production Logs & Metadata", buildDetails)
             }
 
-            // --- COLLAPSIBLE CONTENT SYSTEM ---
-            AnimatedVisibility(visible = isExpanded) {
-                Column(modifier = Modifier.padding(top = 20.dp)) {
+            Spacer(modifier = Modifier.height(24.dp))
 
-                    // Core Macros Grid Layout (Uniform Sizing Rules)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val weightModifier = Modifier.weight(1f)
-                        MacroBadgeItem(weightModifier, "Calories", food.totalCalories ?: "-", "totalCalories", Color(0xFFFFA500))
-                        MacroBadgeItem(weightModifier, "Protein", food.totalProtein ?: "-", "totalProtein", Color(0xFF4CAF50))
-                        MacroBadgeItem(weightModifier, "Carbs", food.totalCarbs ?: "-", "totalCarbs", Color(0xFF2196F3))
-                        MacroBadgeItem(weightModifier, "Fats", food.totalFat ?: "-", "totalFat", Color(0xFFFFEB3B))
-                    }
-
-                    // Secondary Sub-Macros Secondary Ledger Row
-                    if (food.saturatedFat != null || food.unsaturatedFat != null || food.totalWater != null) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            val weightModifier = Modifier.weight(1f)
-                            if (food.saturatedFat != null) MacroBadgeItem(weightModifier, "Sat Fat", food.saturatedFat, "saturatedFat", Color(0xFFCFD8DC))
-                            if (food.unsaturatedFat != null) MacroBadgeItem(weightModifier, "Unsat Fat", food.unsaturatedFat, "unsaturatedFat", Color(0xFF90A4AE))
-                            if (food.totalWater != null) MacroBadgeItem(weightModifier, "Hydration", food.totalWater, "totalWater", Color(0xFF29B6F6))
-                        }
-                    }
-
-                    // Score Validation Reason Text Block
-                    food.foodScoreReason?.let { reason ->
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(12.dp))
-                                .padding(12.dp)
-                        ) {
-                            Text(reason, color = Color.LightGray, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-
-                    // --- HIGHLIGHTED ADVANCED AI INSIGHTS ---
-                    if (food.aiInsights?.whyGood?.isNotEmpty() == true || food.aiInsights?.whyNot?.isNotEmpty() == true) {
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Text(
-                            text = "AI System Insights",
-                            color = NutritionUiTokens.AccentColor,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        food.aiInsights.whyGood?.forEach { text ->
-                            InsightRowItem(icon = Icons.Default.CheckCircle, color = Color(0xFF81C784), text = text)
-                        }
-                        food.aiInsights.whyNot?.forEach { text ->
-                            InsightRowItem(icon = Icons.Default.Cancel, color = Color(0xFFE57373), text = text)
-                        }
-                    }
-
-                    // --- INTERACTIVE SUB-SECTIONS (Clean Layouts) ---
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    if (!food.ingredients.isNullOrEmpty()) {
-                        CollapsiblePanelSection("Composition Ingredients", food.ingredients.joinToString(", "))
-                    }
-                    if (!food.allergens.isNullOrEmpty()) {
-                        CollapsiblePanelSection("Allergen Threat Indicators", food.allergens.joinToString(", "), isThreat = true)
-                    }
-                    if (!food.chemicalsOrPreservatives.isNullOrEmpty()) {
-                        CollapsiblePanelSection("Preservatives & Synthetics", food.chemicalsOrPreservatives.joinToString(", "))
-                    }
-                    if (!food.otherNutrients.isNullOrEmpty()) {
-                        val alternativeText = food.otherNutrients.joinToString(", ") { "${it.name} (${it.amount})" }
-                        CollapsiblePanelSection("Micronutrients & Traces", alternativeText)
-                    }
-
-                    // Product Details Box Factory
-                    if (food.brandName != null || food.expiryDate != null || food.countryOfOrigin != null || food.nutritionValuePerUnit != null) {
-                        val buildDetails = buildString {
-                            food.brandName?.let { append("Brand Label: $it\n") }
-                            food.nutritionValuePerUnit?.let { append("Metric Unit Base: $it\n") }
-                            food.countryOfOrigin?.let { append("Origin Domain: $it\n") }
-                            food.manufactureDate?.let { append("Production Date: $it\n") }
-                            food.expiryDate?.let { append("Terminal Lifecycle Date: $it") }
-                        }.trim()
-                        CollapsiblePanelSection("Production Logs & Metadata", buildDetails)
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // --- STRATEGIC QUANTITY OVERRIDE BUTTONS ---
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        food.amountTaken?.let { amt ->
-                            if (amt.isNotBlank()) {
-                                OutlinedButton(
-                                    onClick = { Toast.makeText(context, "Executing Logging Payload: $amt", Toast.LENGTH_SHORT).show() },
-                                    modifier = Modifier.fillMaxWidth().height(46.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
-                                ) {
-                                    Text("Log Base User Capture Amount ($amt)", fontWeight = FontWeight.Medium)
-                                }
-                            }
-                        }
-
-                        food.aiRecommendedQuantity?.let { recAmt ->
-                            if (recAmt.isNotBlank()) {
-                                Button(
-                                    onClick = { Toast.makeText(context, "Applying AI Optimized Metric: $recAmt", Toast.LENGTH_SHORT).show() },
-                                    modifier = Modifier.fillMaxWidth().height(46.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = NutritionUiTokens.AccentColor)
-                                ) {
-                                    Text(
-                                        text = "Apply AI Recommended Volume ($recAmt)",
-                                        color = NutritionUiTokens.DarkBackground,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+            // --- STRATEGIC PERMISSION-CONTROLLED BUTTONS ---
+            if (canEditNutrition) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    food.amountTaken?.let { amt ->
+                        if (amt.isNotBlank()) {
+                            OutlinedButton(
+                                onClick = { Toast.makeText(context, "Executing Logging Payload: $amt", Toast.LENGTH_SHORT).show() },
+                                modifier = Modifier.fillMaxWidth().height(46.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                            ) {
+                                Text("Log Base User Capture Amount ($amt)", fontWeight = FontWeight.Medium)
                             }
                         }
                     }
+
+                    food.aiRecommendedQuantity?.let { recAmt ->
+                        if (recAmt.isNotBlank()) {
+                            Button(
+                                onClick = { Toast.makeText(context, "Applying AI Optimized Metric: $recAmt", Toast.LENGTH_SHORT).show() },
+                                modifier = Modifier.fillMaxWidth().height(46.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = NutritionUiTokens.AccentColor)
+                            ) {
+                                Text(
+                                    text = "Apply AI Recommended Volume ($recAmt)",
+                                    color = NutritionUiTokens.DarkBackground,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // READ-ONLY BADGE
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFE65100).copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                        .border(1.dp, Color(0xFFE65100).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Read-Only: You cannot log meals for this user.", color = Color(0xFFFFB74D), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
     }
 }
-
 // --- VISUAL UI COMPONENT SUB-FACTORIES ---
 
 @Composable

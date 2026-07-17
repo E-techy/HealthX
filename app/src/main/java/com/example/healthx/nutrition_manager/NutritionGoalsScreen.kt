@@ -29,10 +29,18 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.platform.LocalLocale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NutritionGoalsScreen(viewModel: NutritionViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val sessionManager = remember { com.example.healthx.data.local.SessionManager(context) }
+    val delegatedSession by sessionManager.delegatedSessionFlow.collectAsState()
+
+    val isGuest = delegatedSession != null
+    val canEditGoals = !isGuest || delegatedSession!!.hasPermission("EDIT_GOALS")
+
     var showCreateSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -53,12 +61,15 @@ fun NutritionGoalsScreen(viewModel: NutritionViewModel) {
             }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { viewModel.navigateTo(NutritionScreenState.CreateGoal) }, // FIXED ROUTING
-                containerColor = NutritionUiTokens.AccentColor,
-                contentColor = NutritionUiTokens.DarkBackground
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "New Goal")
+            // HIDE FAB IF THEY LACK EDIT PERMISSIONS
+            if (canEditGoals) {
+                FloatingActionButton(
+                    onClick = { viewModel.navigateTo(NutritionScreenState.CreateGoal) },
+                    containerColor = NutritionUiTokens.AccentColor,
+                    contentColor = NutritionUiTokens.DarkBackground
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "New Goal")
+                }
             }
         }
     ) { paddingValues ->
@@ -119,7 +130,7 @@ fun NutritionGoalsScreen(viewModel: NutritionViewModel) {
 @Composable
 fun AdvancedGoalCard(goal: NutritionGoal) {
     // Extract today's progress, or use empty lists if no logs exist yet
-    val todayString = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    val todayString = SimpleDateFormat("yyyy-MM-dd", LocalLocale.current.platformLocale).format(Date())
     val todayProgress = goal.progressChart?.find { it.date == todayString }
 
     Card(
