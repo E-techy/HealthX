@@ -23,7 +23,7 @@ sealed class SettingsUiState {
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val sessionManager = SessionManager(application)
-    private val TAG = "HEALTHX_SETTINGS"
+    private val TAG = "HealthX_SettingsVM"
 
     private val _settingsData = MutableStateFlow(UserSettingsData())
     val settingsData: StateFlow<UserSettingsData> = _settingsData
@@ -55,7 +55,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
 
             try {
-                Log.d(TAG, "📡 Sending GET request to /api/settings using Token prefix: ${token.take(15)}...")
+                Log.d(TAG, "📡 Sending GET request to /api/settings...")
                 val response = RetrofitClient.settingsApi.getSettings(token)
 
                 if (response.isSuccessful && response.body()?.success == true) {
@@ -96,7 +96,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     val savedData = response.body()!!.data
                     Log.d(TAG, "✅ Update Confirmed! Returned Server Payload confirmation: $savedData")
 
-                    // We merge the old data with the new server data to guarantee local state fields are preserved
                     _settingsData.value = savedData
                     _uiState.value = SettingsUiState.Success("Settings updated successfully")
                 } else {
@@ -115,34 +114,24 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val clean = allergy.trim()
         if (clean.isNotBlank() && !_settingsData.value.allergies.contains(clean)) {
             Log.d(TAG, "➕ Local Allergy Append: $clean")
-            _settingsData.value = _settingsData.value.copy(
-                allergies = _settingsData.value.allergies + clean
-            )
+            _settingsData.value = _settingsData.value.copy(allergies = _settingsData.value.allergies + clean)
         }
     }
 
     fun removeAllergy(allergy: String) {
         Log.d(TAG, "➖ Local Allergy Detach: $allergy")
-        _settingsData.value = _settingsData.value.copy(
-            allergies = _settingsData.value.allergies - allergy
-        )
+        _settingsData.value = _settingsData.value.copy(allergies = _settingsData.value.allergies - allergy)
     }
 
     fun addApiKey(key: ApiKeyItem) {
         Log.d(TAG, "➕ Local API Matrix Registration/Update for Provider: ${key.companyName}")
-        val filtered = _settingsData.value.apiKeys.filterNot {
-            it.companyName == key.companyName && it.modelName == key.modelName
-        }
-        _settingsData.value = _settingsData.value.copy(
-            apiKeys = filtered + key
-        )
+        val filtered = _settingsData.value.apiKeys.filterNot { it.companyName == key.companyName && it.modelName == key.modelName }
+        _settingsData.value = _settingsData.value.copy(apiKeys = filtered + key)
     }
 
     fun removeApiKey(key: ApiKeyItem) {
         Log.d(TAG, "➖ Local API Key Reference Removal: ${key.companyName} -> ${key.modelName}")
-        _settingsData.value = _settingsData.value.copy(
-            apiKeys = _settingsData.value.apiKeys - key
-        )
+        _settingsData.value = _settingsData.value.copy(apiKeys = _settingsData.value.apiKeys - key)
     }
 
     private suspend fun getAuthToken(): String? {
