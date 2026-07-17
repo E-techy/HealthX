@@ -46,7 +46,7 @@ fun HomeScreen(
     onNavigateToScanner: () -> Unit,
     onNavigateToSubscriptions: () -> Unit,
     onNavigateToNutrition: () -> Unit,
-    onNavigateToDelegatedAccess: () -> Unit, // ADDED
+    onNavigateToDelegatedAccess: () -> Unit,
     onSwitchAccountRequested: () -> Unit,
     onLogoutRequested: () -> Unit
 ) {
@@ -64,6 +64,11 @@ fun HomeScreen(
 
     var showQrDialog by remember { mutableStateOf(false) }
 
+    // PERMISSION CHECKS (Defaults to true if NOT in guest mode)
+    val isGuest = delegatedSession != null
+    val canSeeNutrition = !isGuest || delegatedSession!!.hasPermission("SEE_NUTRITION")
+    val canSeeReminders = !isGuest || delegatedSession!!.hasPermission("SEE_REMINDERS")
+
     LaunchedEffect(account) { viewModel.fetchSubscriptionStatus(account) }
 
     AnimatedWaveBackground {
@@ -75,6 +80,7 @@ fun HomeScreen(
                     account = account,
                     subStatus = subStatus,
                     hasMultipleAccounts = hasMultipleAccounts,
+                    delegatedSession = delegatedSession, // Pass session to hide drawer items
                     onShowQrClicked = { showQrDialog = true },
                     onNavigateToSettings = onNavigateToSettings,
                     onNavigateToApiKeys = onNavigateToApiKeys,
@@ -84,19 +90,9 @@ fun HomeScreen(
                     onNavigateToScanner = onNavigateToScanner,
                     onNavigateToSubscriptions = onNavigateToSubscriptions,
                     onNavigateToNutrition = onNavigateToNutrition,
-                    onNavigateToDelegatedAccess = onNavigateToDelegatedAccess, // ADDED
-
-                    // WIRED TO VIEWMODEL FOR INSTANT SESSION CLEARING
-                    onSwitchAccountRequested = {
-                        viewModel.switchAccount {
-                            onSwitchAccountRequested()
-                        }
-                    },
-                    onLogoutRequested = {
-                        viewModel.logout(account.accountId) {
-                            onLogoutRequested()
-                        }
-                    }
+                    onNavigateToDelegatedAccess = onNavigateToDelegatedAccess,
+                    onSwitchAccountRequested = { viewModel.switchAccount { onSwitchAccountRequested() } },
+                    onLogoutRequested = { viewModel.logout(account.accountId) { onLogoutRequested() } }
                 )
             }
         ) {
@@ -111,33 +107,38 @@ fun HomeScreen(
                                 onClick = { coroutineScope.launch { drawerState.open() } },
                                 modifier = Modifier.padding(start = 8.dp)
                             ) {
-                                ProfileIcon(account = account, size = 42)
+                                ProfileIcon(
+                                    profileUrl = delegatedSession?.profilePhotoUrl ?: account.profilePhotoUrl,
+                                    name = delegatedSession?.name ?: account.name,
+                                    size = 42
+                                )
                             }
                         }
                     )
                 },
                 floatingActionButtonPosition = FabPosition.Center,
                 floatingActionButton = {
-                    FloatingActionButton(
-                        onClick = onNavigateToScanner,
-                        containerColor = Color(0xFF1E88E5),
-                        contentColor = Color.White,
-                        shape = CircleShape,
-                        modifier = Modifier.size(64.dp)
-                    ) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = "QR Scanner", modifier = Modifier.size(32.dp))
+                    // Hide Scanner FAB entirely in Guest Mode
+                    if (!isGuest) {
+                        FloatingActionButton(
+                            onClick = onNavigateToScanner,
+                            containerColor = Color(0xFF1E88E5),
+                            contentColor = Color.White,
+                            shape = CircleShape,
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = "QR Scanner", modifier = Modifier.size(32.dp))
+                        }
                     }
                 }
             ) { innerPadding ->
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
+                    modifier = Modifier.fillMaxSize().padding(innerPadding),
                     contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
 
                     // 1. THE DELEGATED GUEST BANNER
-                    if (delegatedSession != null) {
+                    if (isGuest) {
                         item {
                             DelegatedModeBanner(
                                 targetName = delegatedSession!!.name,
@@ -151,13 +152,13 @@ fun HomeScreen(
                     item {
                         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
                             Text(
-                                text = if (delegatedSession != null) "Viewing data for," else "Welcome back,",
+                                text = if (isGuest) "Viewing data for," else "Welcome back,",
                                 color = Color.Gray,
                                 fontSize = 16.sp
                             )
                             Text(
-                                text = delegatedSession?.name ?: account.name, // Swap name dynamically!
-                                color = if (delegatedSession != null) Color(0xFF00E676) else Color.White,
+                                text = delegatedSession?.name ?: account.name,
+                                color = if (isGuest) Color(0xFF00E676) else Color.White,
                                 fontSize = 28.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(top = 4.dp)
@@ -165,30 +166,37 @@ fun HomeScreen(
                         }
                     }
 
-                    // 3. YOUR EXISTING STATS & COMPONENTS
+                    // 3. STATS GRID (Always visible for now, or you can wrap in a permission)
                     item {
                         HealthStatsGrid(
-                            onHeartRateClick = { /* TODO: Route */ },
-                            onSpo2Click = { /* TODO: Route */ },
-                            onBpClick = { /* TODO: Route */ },
-                            onSleepClick = { /* TODO: Route */ }
+                            onHeartRateClick = { /* TODO */ },
+                            onSpo2Click = { /* TODO */ },
+                            onBpClick = { /* TODO */ },
+                            onSleepClick = { /* TODO */ }
                         )
                         Spacer(modifier = Modifier.height(32.dp))
                     }
 
-                    item {
-                        HomeNutritionSection(onNutritionClick = onNavigateToNutrition)
-                        Spacer(modifier = Modifier.height(32.dp))
+                    // 4. NUTRITION SECTION (Protected)
+                    if (canSeeNutrition) {
+                        item {
+                            HomeNutritionSection(onNutritionClick = onNavigateToNutrition)
+                            Spacer(modifier = Modifier.height(32.dp))
+                        }
                     }
 
-                    item {
-                        HomeUpcomingAlarms(
-                            activeAlarms = activeAlarms,
-                            onOpenAlarmManager = onNavigateToAlarmManager
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
+                    // 5. ALARMS / REMINDERS SECTION (Protected)
+                    if (canSeeReminders) {
+                        item {
+                            HomeUpcomingAlarms(
+                                activeAlarms = activeAlarms,
+                                onOpenAlarmManager = onNavigateToAlarmManager
+                            )
+                            Spacer(modifier = Modifier.height(32.dp))
+                        }
                     }
 
+                    // 6. MEETINGS
                     item {
                         HomeMeetings(onMeetingsClick = { /* TODO */ })
                         Spacer(modifier = Modifier.height(32.dp))
@@ -198,12 +206,12 @@ fun HomeScreen(
         }
     }
 
-    if (showQrDialog) {
+    if (showQrDialog && !isGuest) {
         ShareProfileFullScreenDialog(account = account, onClose = { showQrDialog = false })
     }
 }
 
-// ... rest of the file remains exactly the same (ShareProfileFullScreenDialog, AnimatedWaveBackground)
+// ... Keep existing ShareProfileFullScreenDialog, AnimatedWaveBackground, DelegatedModeBanner ...
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareProfileFullScreenDialog(account: SavedAccount, onClose: () -> Unit) {
@@ -328,7 +336,6 @@ fun AnimatedWaveBackground(content: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().background(brush)) { content() }
 }
 
-// THE BANNER COMPOSABLE
 @Composable
 fun DelegatedModeBanner(targetName: String, onExit: () -> Unit) {
     Surface(
