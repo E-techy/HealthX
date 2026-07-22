@@ -73,6 +73,13 @@
             android:theme="@style/Theme.HealthX"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".docs_manager.DocsManagerActivity"
+            android:exported="false"
+            android:label="Docs Manager"
+            android:theme="@style/Theme.HealthX"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name=".notification_manager.HealthXMessagingService"
             android:exported="true">

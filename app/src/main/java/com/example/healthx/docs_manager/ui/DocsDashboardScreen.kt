@@ -20,6 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.healthx.docs_manager.ui.components.DocAccessManagerDialog
+import com.example.healthx.docs_manager.ui.components.DocumentCard
+import com.example.healthx.docs_manager.ui.components.UploadDocDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
