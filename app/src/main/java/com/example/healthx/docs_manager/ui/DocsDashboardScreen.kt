@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -105,6 +106,39 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
+
+            val filterCategories = listOf("ALL", "HEALTH", "DIAGNOSTICS", "PRESCRIPTION", "NUTRITION_MONTHLY_REPORT", "OTHER")
+
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filterCategories) { cat ->
+                    val isSelected = if (cat == "ALL") viewModel.selectedCategory == null else viewModel.selectedCategory == cat
+                    val displayCat = cat.replace("_", " ")
+
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            viewModel.selectedCategory = if (cat == "ALL") null else cat
+                            viewModel.loadDocs(reset = true)
+                        },
+                        label = { Text(displayCat, fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color(0xFF1E1E1E),
+                            labelColor = Color.LightGray,
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = Color.White
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderColor = Color(0xFF2C2C2C),
+                            enabled = true,
+                            selected = isSelected
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                }
+            }
 
             // LIST
             if (isLoading && docsList.isEmpty()) {

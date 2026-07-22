@@ -93,8 +93,8 @@ fun HomeScreen(
                     onNavigateToSubscriptions = onNavigateToSubscriptions,
                     onNavigateToDelegatedAccess = onNavigateToDelegatedAccess,
                     onNavigateToDocsManager = onNavigateToDocsManager,
-                    onSwitchAccountRequested = { viewModel.switchAccount { onSwitchAccountRequested() } },
-                ) { viewModel.logout(account.accountId) { onLogoutRequested() } }
+                    onLogoutRequested = { viewModel.logout(account.accountId) { onLogoutRequested() } },
+                    onSwitchAccountRequested = { viewModel.switchAccount { onSwitchAccountRequested() } })
             }
         ) {
             Scaffold(
