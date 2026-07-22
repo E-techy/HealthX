@@ -41,7 +41,8 @@ fun HomeDrawerContent(
     onNavigateToSubscriptions: () -> Unit,
     onNavigateToDelegatedAccess: () -> Unit,
     onSwitchAccountRequested: () -> Unit,
-    onLogoutRequested: () -> Unit
+    onLogoutRequested: () -> Unit,
+    onNavigateToDocsManager: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val isGuest = delegatedSession != null
@@ -88,6 +89,12 @@ fun HomeDrawerContent(
             if (!isGuest || delegatedSession!!.hasPermission("SEE_SUBSCRIPTION")) {
                 DrawerItem(icon = Icons.Default.CardMembership, label = "Subscriptions") {
                     coroutineScope.launch { drawerState.close() }; onNavigateToSubscriptions()
+                }
+            }
+
+            if (!isGuest || delegatedSession!!.hasPermission("SEE_DOCS")) {
+                DrawerItem(icon = Icons.Default.Folder, label = "Docs Manager") {
+                    coroutineScope.launch { drawerState.close() }; onNavigateToDocsManager() // You need to pass this callback
                 }
             }
 

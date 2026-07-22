@@ -88,12 +88,11 @@ fun HomeScreen(
                     onNavigateToReminders = onNavigateToReminders,
                     onNavigateToAlarmManager = onNavigateToAlarmManager,
                     onNavigateToScanner = onNavigateToScanner,
-                    onNavigateToSubscriptions = onNavigateToSubscriptions,
                     onNavigateToNutrition = onNavigateToNutrition,
+                    onNavigateToSubscriptions = onNavigateToSubscriptions,
                     onNavigateToDelegatedAccess = onNavigateToDelegatedAccess,
                     onSwitchAccountRequested = { viewModel.switchAccount { onSwitchAccountRequested() } },
-                    onLogoutRequested = { viewModel.logout(account.accountId) { onLogoutRequested() } }
-                )
+                ) { viewModel.logout(account.accountId) { onLogoutRequested() } }
             }
         ) {
             Scaffold(
