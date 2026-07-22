@@ -2,7 +2,6 @@ package com.example.healthx
 
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -34,7 +33,6 @@ import com.example.healthx.shareable_data_manager.DelegatedAccessActivity
 import com.example.healthx.ui.theme.HealthXTheme
 import com.example.healthx.utils.LocalActiveAccount
 import com.google.firebase.FirebaseApp
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -110,6 +108,9 @@ class MainActivity : ComponentActivity() {
                             // ADDED: Launching the Delegated Access Activity
                             onNavigateToDelegatedAccess = {
                                 context.startActivity(Intent(context, DelegatedAccessActivity::class.java))
+                            },
+                            onNavigateToDocsManager = {
+                                context.startActivity(Intent(context, com.example.healthx.docs_manager.DocsManagerActivity::class.java))
                             },
                             onSwitchAccountRequested = { /* ... */ },
                             onLogoutRequested = { /* ... */ }

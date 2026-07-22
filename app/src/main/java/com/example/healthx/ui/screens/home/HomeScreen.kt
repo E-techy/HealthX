@@ -48,7 +48,8 @@ fun HomeScreen(
     onNavigateToNutrition: () -> Unit,
     onNavigateToDelegatedAccess: () -> Unit,
     onSwitchAccountRequested: () -> Unit,
-    onLogoutRequested: () -> Unit
+    onLogoutRequested: () -> Unit,
+    onNavigateToDocsManager: () -> Unit
 ) {
     val context = LocalContext.current
     val sessionManager = remember { SessionManager(context) }
@@ -91,6 +92,7 @@ fun HomeScreen(
                     onNavigateToNutrition = onNavigateToNutrition,
                     onNavigateToSubscriptions = onNavigateToSubscriptions,
                     onNavigateToDelegatedAccess = onNavigateToDelegatedAccess,
+                    onNavigateToDocsManager = onNavigateToDocsManager,
                     onSwitchAccountRequested = { viewModel.switchAccount { onSwitchAccountRequested() } },
                 ) { viewModel.logout(account.accountId) { onLogoutRequested() } }
             }
