@@ -21,6 +21,7 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 
+
 class DocsViewModel(application: Application) : AndroidViewModel(application) {
     private val api = RetrofitClient.docsApi
     private val sessionManager = SessionManager(application)

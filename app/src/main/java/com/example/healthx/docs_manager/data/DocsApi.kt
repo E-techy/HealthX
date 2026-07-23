@@ -87,7 +87,8 @@ interface DocsApi {
         @Path("documentId") documentId: String
     ): Response<SimpleResponse>
 
-    // DOWNLOAD ROUTES
+    // === DOWNLOAD ROUTES ===
+
     @Streaming
     @GET("api/docs/shared/{documentId}")
     suspend fun downloadSharedDoc(
@@ -99,6 +100,21 @@ interface DocsApi {
     @POST("api/docs/secure/{documentId}")
     suspend fun downloadSecureDoc(
         @Path("documentId") documentId: String,
+        @Body request: PasswordRequest
+    ): Response<ResponseBody>
+
+    // === NEW: PUBLIC FETCH ROUTES (NO AUTH HEADER) ===
+
+    @Streaming
+    @GET("api/docs/public/{publicKey}")
+    suspend fun downloadPublicDoc(
+        @Path("publicKey") publicKey: String
+    ): Response<ResponseBody>
+
+    @Streaming
+    @POST("api/docs/public/{publicKey}/secure")
+    suspend fun downloadPublicSecureDoc(
+        @Path("publicKey") publicKey: String,
         @Body request: PasswordRequest
     ): Response<ResponseBody>
 }
