@@ -175,9 +175,13 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
                             isOwner = viewModel.currentTab == "MY_DOCS",
                             onManageAccess = { manageAccessDocId = doc._id },
                             onDelete = { viewModel.deleteDocument(doc._id) },
+                            onView = {
+                                val isShared = viewModel.currentTab == "SHARED"
+                                viewModel.previewDocument(doc._id, doc.documentName, context, isShared)
+                            },
                             onDownload = {
                                 val isShared = viewModel.currentTab == "SHARED"
-                                viewModel.downloadAndPreviewDocument(doc._id, doc.documentName, context, isShared)
+                                viewModel.downloadToDevice(doc._id, doc.documentName, context, isShared)
                             }
                         )
                     }

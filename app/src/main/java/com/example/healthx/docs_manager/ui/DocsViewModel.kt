@@ -25,6 +25,9 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import android.content.pm.PackageManager
+import android.os.Environment
+import android.widget.Toast
 
 class DocsViewModel(application: Application) : AndroidViewModel(application) {
     private val api = RetrofitClient.docsApi
@@ -277,6 +280,100 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
             file
         } catch (e: Exception) {
             null
+        }
+    }
+    // ... Inside DocsViewModel.kt
+
+
+    // === NEW: ROBUST PREVIEW AND DOWNLOAD ENGINE ===
+
+    fun previewDocument(docId: String, fileName: String, context: Context, isShared: Boolean = false) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val token = "Bearer ${sessionManager.activeAccountFlow.firstOrNull()?.token}"
+                val response = api.downloadSharedDoc(token, docId)
+
+                if (response.isSuccessful && response.body() != null) {
+                    // Preview saves to CacheDir (Cleared when app needs memory)
+                    val file = File(context.cacheDir, fileName.replace(" ", "_"))
+                    saveToFile(response.body()!!, file)
+                    openFileWithIntent(file, response.body()!!.contentType()?.toString(), context)
+                } else {
+                    _errorMessage.value = parseError(response.errorBody()?.string())
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Preview failed: ${e.localizedMessage}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun downloadToDevice(docId: String, fileName: String, context: Context, isShared: Boolean = false) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val token = "Bearer ${sessionManager.activeAccountFlow.firstOrNull()?.token}"
+                val response = api.downloadSharedDoc(token, docId)
+
+                if (response.isSuccessful && response.body() != null) {
+                    // Download saves permanently to the OS Downloads folder
+                    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    val file = File(downloadsDir, fileName.replace(" ", "_"))
+                    saveToFile(response.body()!!, file)
+
+                    Toast.makeText(context, "Saved to Downloads: ${file.name}", Toast.LENGTH_LONG).show()
+                } else {
+                    _errorMessage.value = parseError(response.errorBody()?.string())
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Download failed: ${e.localizedMessage}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    // Extracted file writing logic
+    private fun saveToFile(body: ResponseBody, file: File) {
+        var inputStream: InputStream? = null
+        var outputStream: FileOutputStream? = null
+        try {
+            inputStream = body.byteStream()
+            outputStream = FileOutputStream(file)
+            val buffer = ByteArray(4096)
+            var read: Int
+            while (inputStream.read(buffer).also { read = it } != -1) {
+                outputStream.write(buffer, 0, read)
+            }
+            outputStream.flush()
+        } finally {
+            inputStream?.close()
+            outputStream?.close()
+        }
+    }
+
+    // FIX FOR THE HANGING VIEWER
+    private fun openFileWithIntent(file: File, mimeType: String?, context: Context) {
+        try {
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType ?: "*/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            // EXPLICITLY GRANT PERMISSION TO ALL APPS THAT CAN HANDLE THIS INTENT (Fixes the blank/hanging screen)
+            val resInfoList = context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            for (resolveInfo in resInfoList) {
+                val packageName = resolveInfo.activityInfo.packageName
+                context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            _errorMessage.value = "No app found to open this file type."
         }
     }
 }

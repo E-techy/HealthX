@@ -1,6 +1,5 @@
 package com.example.healthx.docs_manager.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,7 +20,8 @@ fun DocumentCard(
     isOwner: Boolean,
     onManageAccess: () -> Unit,
     onDelete: () -> Unit,
-    onDownload: () -> Unit // NEW CALLBACK
+    onView: () -> Unit,      // Trigger Cache Preview
+    onDownload: () -> Unit   // Trigger Permanent Save
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -51,7 +51,7 @@ fun DocumentCard(
 
             Text(text = doc.documentCategory, color = Color.Gray, fontSize = 14.sp)
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // ACTION BUTTONS ROW
             Row(
@@ -59,21 +59,33 @@ fun DocumentCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // DOWNLOAD BUTTON (Visible for both owners and shared users)
-                Button(
-                    onClick = onDownload,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    modifier = Modifier.height(36.dp)
-                ) {
-                    Icon(Icons.Default.Download, contentDescription = "Download", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Download", fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 1. VIEW BUTTON (In-Memory/Cache)
+                    Button(
+                        onClick = onView,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Icon(Icons.Default.Visibility, contentDescription = "View", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("View", fontSize = 12.sp)
+                    }
+
+                    // 2. DOWNLOAD BUTTON (Permanent Save)
+                    OutlinedButton(
+                        onClick = onDownload,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = "Save", modifier = Modifier.size(16.dp))
+                    }
                 }
 
                 if (isOwner) {
                     Row {
-                        TextButton(onClick = onManageAccess) { Text("Manage Access", color = Color(0xFF64B5F6)) }
+                        IconButton(onClick = onManageAccess) { Icon(Icons.Default.AdminPanelSettings, contentDescription = "Access", tint = Color(0xFF64B5F6)) }
                         IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFE53935)) }
                     }
                 }
