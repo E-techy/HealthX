@@ -9,6 +9,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -37,17 +41,24 @@ fun DocAccessManagerDialog(
     val clipboardManager = LocalClipboardManager.current
     var accessData by remember { mutableStateOf<AccessDetailsData?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    var actionError by remember { mutableStateOf<String?>(null) } // To show errors without crashing
 
     // Input States
     var passwordInput by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) } // The Eye Toggle State
     var targetUserIdInput by remember { mutableStateOf("") }
 
-    // Fetch initial data
+    // Fetch initial data safely
     val loadData = {
         coroutineScope.launch {
-            isLoading = true
-            accessData = viewModel.getAccessDetails(docId)
-            isLoading = false
+            try {
+                isLoading = true
+                accessData = viewModel.getAccessDetails(docId)
+            } catch (e: Exception) {
+                actionError = "Failed to load access details."
+            } finally {
+                isLoading = false
+            }
         }
     }
 
@@ -63,6 +74,7 @@ fun DocAccessManagerDialog(
             color = Color(0xFF121212)
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
+
                 // HEADER
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -75,9 +87,19 @@ fun DocAccessManagerDialog(
 
                 Divider(color = Color(0xFF2C2C2C), modifier = Modifier.padding(vertical = 16.dp))
 
+                // IN-APP ERROR DISPLAY (Prevents Crashing)
+                if (actionError != null) {
+                    Text(
+                        text = actionError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 16.dp),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
                 if (isLoading) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 } else if (accessData != null) {
                     val data = accessData!!
@@ -102,12 +124,28 @@ fun DocAccessManagerDialog(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Button(
-                                    onClick = { coroutineScope.launch { viewModel.revokePublic(docId); loadData() } },
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            try {
+                                                actionError = null
+                                                viewModel.revokePublic(docId)
+                                                loadData()
+                                            } catch (e: Exception) { actionError = "Failed to revoke link." }
+                                        }
+                                    },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935))
                                 ) { Text("Revoke Public Link", color = Color.White) }
                             } else {
                                 Button(
-                                    onClick = { coroutineScope.launch { viewModel.makePublic(docId); loadData() } }
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            try {
+                                                actionError = null
+                                                viewModel.makePublic(docId)
+                                                loadData()
+                                            } catch (e: Exception) { actionError = "Failed to generate link." }
+                                        }
+                                    }
                                 ) { Text("Generate Public Link") }
                             }
                             Divider(color = Color(0xFF2C2C2C), modifier = Modifier.padding(vertical = 24.dp))
@@ -127,17 +165,33 @@ fun DocAccessManagerDialog(
                                 OutlinedTextField(
                                     value = passwordInput,
                                     onValueChange = { passwordInput = it },
-                                    placeholder = { Text(if (data.isPasswordProtected) "Update Password" else "Set Password") },
+                                    placeholder = { Text(if (data.isPasswordProtected) "Update Password" else "Set Password", color = Color.Gray) },
                                     modifier = Modifier.weight(1f),
-                                    singleLine = true
+                                    singleLine = true,
+                                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = Color.DarkGray
+                                    ),
+                                    trailingIcon = {
+                                        val image = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                            Icon(imageVector = image, contentDescription = "Toggle password visibility", tint = Color.Gray)
+                                        }
+                                    }
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Button(
                                     onClick = {
                                         coroutineScope.launch {
-                                            viewModel.setPassword(docId, passwordInput)
-                                            passwordInput = ""
-                                            loadData()
+                                            try {
+                                                actionError = null
+                                                viewModel.setPassword(docId, passwordInput)
+                                                passwordInput = ""
+                                                loadData()
+                                            } catch (e: Exception) { actionError = "Failed to set password." }
                                         }
                                     },
                                     enabled = passwordInput.isNotBlank()
@@ -155,17 +209,26 @@ fun DocAccessManagerDialog(
                                 OutlinedTextField(
                                     value = targetUserIdInput,
                                     onValueChange = { targetUserIdInput = it },
-                                    placeholder = { Text("Enter User ID") },
+                                    placeholder = { Text("Enter User ID", color = Color.Gray) },
                                     modifier = Modifier.weight(1f),
-                                    singleLine = true
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = Color.DarkGray
+                                    )
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Button(
                                     onClick = {
                                         coroutineScope.launch {
-                                            viewModel.shareUser(docId, targetUserIdInput)
-                                            targetUserIdInput = ""
-                                            loadData()
+                                            try {
+                                                actionError = null
+                                                viewModel.shareUser(docId, targetUserIdInput)
+                                                targetUserIdInput = ""
+                                                loadData()
+                                            } catch (e: Exception) { actionError = "Invalid User ID or network error." } // Prevents Crash!
                                         }
                                     },
                                     enabled = targetUserIdInput.isNotBlank()
@@ -186,13 +249,18 @@ fun DocAccessManagerDialog(
                                     Text(user.email, color = Color.Gray, fontSize = 12.sp)
                                 }
                                 IconButton(
-                                    onClick = { coroutineScope.launch { viewModel.revokeShare(docId, user._id); loadData() } }
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            try {
+                                                viewModel.revokeShare(docId, user._id)
+                                                loadData()
+                                            } catch (e: Exception) { actionError = "Failed to remove user." }
+                                        }
+                                    }
                                 ) { Icon(Icons.Default.Delete, contentDescription = "Revoke", tint = Color(0xFFE53935)) }
                             }
                         }
                     }
-                } else {
-                    Text("Failed to load access details.", color = Color.Red)
                 }
             }
         }
