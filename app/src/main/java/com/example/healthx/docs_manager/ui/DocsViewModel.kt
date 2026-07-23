@@ -3,6 +3,7 @@ package com.example.healthx.docs_manager.ui
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -187,7 +188,7 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // === LIVE DOWNLOAD ENGINE (STORAGE ACCESS FRAMEWORK & NOTIFICATIONS) ===
+    // === LIVE DOWNLOAD ENGINE (STORAGE ACCESS FRAMEWORK) ===
 
     fun cancelDownload(docId: String) {
         activeDownloadJobs[docId]?.cancel()
@@ -200,18 +201,20 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         _downloadStates.value = _downloadStates.value.toMutableMap().apply { put(docId, state) }
     }
 
-    fun downloadToUri(docId: String, fileName: String, destUri: Uri, context: Context, isShared: Boolean = false) {
+    fun downloadToUri(docId: String, defaultFileName: String, destUri: Uri, context: Context, isShared: Boolean = false) {
         if (activeDownloadJobs.containsKey(docId)) return
 
         val job = viewModelScope.launch(Dispatchers.IO) {
             updateDownloadState(docId, DownloadState.Downloading(0))
             val notificationId = docId.hashCode()
 
-            // Initialize the persistent notification builder
+            // Resolve the actual file name chosen by the user in the dialog
+            val actualFileName = getFileNameFromUri(destUri) ?: defaultFileName
+
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setContentTitle("Downloading $fileName")
+                .setContentTitle("Downloading $actualFileName")
                 .setContentText("0%")
-                .setSmallIcon(android.R.drawable.stat_sys_download) // Animated/downloading logo
+                .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setProgress(100, 0, false)
@@ -224,12 +227,14 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                     val body = response.body()!!
                     val totalBytes = body.contentLength()
 
+                    // Write directly to the user-selected location
                     context.contentResolver.openOutputStream(destUri)?.use { out ->
                         body.byteStream().use { input ->
                             val buffer = ByteArray(8 * 1024)
                             var bytesCopied = 0L
                             var read: Int
                             var lastProgress = 0
+                            var lastNotificationTime = 0L
 
                             while (input.read(buffer).also { read = it } >= 0) {
                                 yield() // Safely allows cancellation
@@ -238,11 +243,15 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
 
                                 if (totalBytes > 0) {
                                     val progress = ((bytesCopied * 100) / totalBytes).toInt()
-                                    if (progress != lastProgress) {
+                                    val currentTime = System.currentTimeMillis()
+
+                                    // Throttle notification updates to prevent OS shedding
+                                    if (progress != lastProgress && (currentTime - lastNotificationTime > 500 || progress == 100)) {
                                         lastProgress = progress
+                                        lastNotificationTime = currentTime
+
                                         updateDownloadState(docId, DownloadState.Downloading(progress))
 
-                                        // Update the same notification builder
                                         notificationBuilder.setProgress(100, progress, false)
                                             .setContentText("$progress%")
                                         notificationManager.notify(notificationId, notificationBuilder.build())
@@ -254,16 +263,46 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
 
                     updateDownloadState(docId, DownloadState.Success)
 
-                    // PROPER FIX: Modify the EXACT same builder to strip the progress bar and change the icon
-                    notificationBuilder
-                        .setContentTitle("Download Complete")
-                        .setContentText(fileName)
-                        .setSmallIcon(android.R.drawable.stat_sys_download_done) // Static completed logo
-                        .setProgress(0, 0, false) // THIS removes the progress bar
-                        .setOngoing(false) // Allows the user to swipe it away
-                        .setAutoCancel(true)
+                    // === CLICKABLE NOTIFICATION LOGIC ===
 
-                    notificationManager.notify(notificationId, notificationBuilder.build())
+                    // Determine the precise MIME type so Android knows which app to launch
+                    val extension = actualFileName.substringAfterLast('.', "")
+                    val computedMimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
+                        ?: body.contentType()?.toString()
+                        ?: "*/*"
+
+                    // Create the intent to view the downloaded file
+                    val openIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(destUri, computedMimeType)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+
+                    // Explicitly grant permissions to target viewer apps to avoid the viewer hanging
+                    val resInfoList = context.packageManager.queryIntentActivities(openIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                    for (resolveInfo in resInfoList) {
+                        context.grantUriPermission(resolveInfo.activityInfo.packageName, destUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+
+                    // Create the PendingIntent
+                    val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    } else {
+                        PendingIntent.FLAG_UPDATE_CURRENT
+                    }
+                    val pendingIntent = PendingIntent.getActivity(context, notificationId, openIntent, pendingIntentFlags)
+
+                    // Build the completed notification
+                    val completedNotification = NotificationCompat.Builder(context, CHANNEL_ID)
+                        .setContentTitle("Download Complete")
+                        .setContentText(actualFileName) // Displays the chosen file name
+                        .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                        .setAutoCancel(true)
+                        .setOngoing(false)
+                        .setContentIntent(pendingIntent) // Tap to open!
+                        .build()
+
+                    notificationManager.notify(notificationId, completedNotification)
 
                     delay(3000)
                     updateDownloadState(docId, DownloadState.Idle)
@@ -397,22 +436,29 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun getFileFromUri(uri: Uri): File? {
-        val contentResolver = context.contentResolver
-        var originalName = "temp_upload_${System.currentTimeMillis()}"
-
-        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index != -1) {
-                    originalName = cursor.getString(index).replace(" ", "_")
+    // Helper to get true file name from SAF URI
+    private fun getFileNameFromUri(uri: Uri): String? {
+        var result: String? = null
+        if (uri.scheme == "content") {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index != -1) result = cursor.getString(index)
                 }
             }
         }
+        if (result == null) {
+            result = uri.path?.let { File(it).name }
+        }
+        return result
+    }
 
-        val file = File(context.cacheDir, originalName)
+    private fun getFileFromUri(uri: Uri): File? {
+        val originalName = getFileNameFromUri(uri) ?: "temp_upload_${System.currentTimeMillis()}"
+        val file = File(context.cacheDir, originalName.replace(" ", "_"))
+
         return try {
-            val inputStream = contentResolver.openInputStream(uri)
+            val inputStream = context.contentResolver.openInputStream(uri)
             val outputStream = FileOutputStream(file)
             inputStream?.copyTo(outputStream)
             inputStream?.close()
