@@ -63,7 +63,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
     var selectedCategory: String? = null
     var searchQuery: String = ""
 
-    // --- DOWNLOAD TRACKING ---
     private val _downloadStates = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
     val downloadStates = _downloadStates.asStateFlow()
     private val activeDownloadJobs = mutableMapOf<String, Job>()
@@ -188,8 +187,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // === LIVE DOWNLOAD ENGINE (STORAGE ACCESS FRAMEWORK) ===
-
     fun cancelDownload(docId: String) {
         activeDownloadJobs[docId]?.cancel()
         activeDownloadJobs.remove(docId)
@@ -208,7 +205,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
             updateDownloadState(docId, DownloadState.Downloading(0))
             val notificationId = docId.hashCode()
 
-            // Resolve the actual file name chosen by the user in the dialog
             val actualFileName = getFileNameFromUri(destUri) ?: defaultFileName
 
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -227,7 +223,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                     val body = response.body()!!
                     val totalBytes = body.contentLength()
 
-                    // Write directly to the user-selected location
                     context.contentResolver.openOutputStream(destUri)?.use { out ->
                         body.byteStream().use { input ->
                             val buffer = ByteArray(8 * 1024)
@@ -237,7 +232,7 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                             var lastNotificationTime = 0L
 
                             while (input.read(buffer).also { read = it } >= 0) {
-                                yield() // Safely allows cancellation
+                                yield()
                                 out.write(buffer, 0, read)
                                 bytesCopied += read
 
@@ -245,7 +240,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                                     val progress = ((bytesCopied * 100) / totalBytes).toInt()
                                     val currentTime = System.currentTimeMillis()
 
-                                    // Throttle notification updates to prevent OS shedding
                                     if (progress != lastProgress && (currentTime - lastNotificationTime > 500 || progress == 100)) {
                                         lastProgress = progress
                                         lastNotificationTime = currentTime
@@ -263,28 +257,22 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
 
                     updateDownloadState(docId, DownloadState.Success)
 
-                    // === CLICKABLE NOTIFICATION LOGIC ===
-
-                    // Determine the precise MIME type so Android knows which app to launch
                     val extension = actualFileName.substringAfterLast('.', "")
                     val computedMimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
                         ?: body.contentType()?.toString()
                         ?: "*/*"
 
-                    // Create the intent to view the downloaded file
                     val openIntent = Intent(Intent.ACTION_VIEW).apply {
                         setDataAndType(destUri, computedMimeType)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
 
-                    // Explicitly grant permissions to target viewer apps to avoid the viewer hanging
                     val resInfoList = context.packageManager.queryIntentActivities(openIntent, PackageManager.MATCH_DEFAULT_ONLY)
                     for (resolveInfo in resInfoList) {
                         context.grantUriPermission(resolveInfo.activityInfo.packageName, destUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
 
-                    // Create the PendingIntent
                     val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                     } else {
@@ -292,14 +280,13 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     val pendingIntent = PendingIntent.getActivity(context, notificationId, openIntent, pendingIntentFlags)
 
-                    // Build the completed notification
                     val completedNotification = NotificationCompat.Builder(context, CHANNEL_ID)
                         .setContentTitle("Download Complete")
-                        .setContentText(actualFileName) // Displays the chosen file name
+                        .setContentText(actualFileName)
                         .setSmallIcon(android.R.drawable.stat_sys_download_done)
                         .setAutoCancel(true)
                         .setOngoing(false)
-                        .setContentIntent(pendingIntent) // Tap to open!
+                        .setContentIntent(pendingIntent)
                         .build()
 
                     notificationManager.notify(notificationId, completedNotification)
@@ -312,7 +299,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                     notificationManager.cancel(notificationId)
                 }
             } catch (e: CancellationException) {
-                // Delete the partial file if cancelled mid-download
                 context.contentResolver.delete(destUri, null, null)
                 updateDownloadState(docId, DownloadState.Idle)
                 notificationManager.cancel(notificationId)
@@ -325,8 +311,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         }
         activeDownloadJobs[docId] = job
     }
-
-    // === CACHED PREVIEW (For the View Button) ===
 
     fun previewDocument(docId: String, fileName: String, context: Context, isShared: Boolean = false) {
         viewModelScope.launch {
@@ -387,8 +371,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // INTERNAL UTILS
-
     private fun saveToFile(body: ResponseBody, file: File) {
         var inputStream: InputStream? = null
         var outputStream: FileOutputStream? = null
@@ -436,7 +418,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Helper to get true file name from SAF URI
     private fun getFileNameFromUri(uri: Uri): String? {
         var result: String? = null
         if (uri.scheme == "content") {
@@ -483,12 +464,17 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun getToken() = sessionManager.activeAccountFlow.firstOrNull()?.token
 
+    // === NEW: ROBUST ERROR PARSER (Handles Server HTML cleanly) ===
     private fun parseError(errorBody: String?): String {
         return try {
             val json = JSONObject(errorBody ?: "")
             json.getString("message")
         } catch (e: Exception) {
-            "An unknown error occurred."
+            if (errorBody?.contains("<html", ignoreCase = true) == true) {
+                "Link is invalid or requires browser access."
+            } else {
+                "An unknown error occurred."
+            }
         }
     }
 }
