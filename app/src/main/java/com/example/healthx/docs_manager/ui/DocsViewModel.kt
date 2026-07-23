@@ -1,21 +1,32 @@
 package com.example.healthx.docs_manager.ui
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
+import android.widget.Toast
+import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.healthx.R
 import com.example.healthx.data.local.SessionManager
 import com.example.healthx.data.network.RetrofitClient
 import com.example.healthx.docs_manager.data.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -25,9 +36,13 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
-import android.content.pm.PackageManager
-import android.os.Environment
-import android.widget.Toast
+
+sealed class DownloadState {
+    object Idle : DownloadState()
+    data class Downloading(val progress: Int) : DownloadState()
+    object Success : DownloadState()
+    data class Error(val message: String) : DownloadState()
+}
 
 class DocsViewModel(application: Application) : AndroidViewModel(application) {
     private val api = RetrofitClient.docsApi
@@ -49,12 +64,32 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
     // Pagination & Filters
     var currentPage = 1
     var hasNextPage = false
-    var currentTab = "MY_DOCS" // or "SHARED"
+    var currentTab = "MY_DOCS"
     var selectedCategory: String? = null
     var searchQuery: String = ""
 
+    // --- DOWNLOAD TRACKING ---
+    private val _downloadStates = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
+    val downloadStates = _downloadStates.asStateFlow()
+    private val activeDownloadJobs = mutableMapOf<String, Job>()
+
+    private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    private val CHANNEL_ID = "healthx_downloads"
+
     init {
+        createNotificationChannel()
         loadDocs(reset = true)
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Document Downloads",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply { description = "Shows progress for downloading documents" }
+            notificationManager.createNotificationChannel(channel)
+        }
     }
 
     fun clearError() { _errorMessage.value = null }
@@ -116,7 +151,10 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                val requestFile = file.asRequestBody("multipart/form-data".toMediaTypeOrNull())
+                val extension = file.name.substringAfterLast('.', "")
+                val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase()) ?: "application/octet-stream"
+
+                val requestFile = file.asRequestBody(mimeType.toMediaTypeOrNull())
                 val body = MultipartBody.Part.createFormData("documentFile", file.name, requestFile)
                 val nameBody = name.toRequestBody("text/plain".toMediaTypeOrNull())
                 val catBody = category.toRequestBody("text/plain".toMediaTypeOrNull())
@@ -155,23 +193,154 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // === NEW: DOWNLOAD AND PREVIEW ENGINE ===
+    // === LIVE DOWNLOAD ENGINE ===
 
-    fun downloadAndPreviewDocument(docId: String, fileName: String, context: Context, isShared: Boolean = false) {
+    fun cancelDownload(docId: String) {
+        activeDownloadJobs[docId]?.cancel()
+        activeDownloadJobs.remove(docId)
+        updateDownloadState(docId, DownloadState.Idle)
+        notificationManager.cancel(docId.hashCode())
+    }
+
+    private fun updateDownloadState(docId: String, state: DownloadState) {
+        _downloadStates.value = _downloadStates.value.toMutableMap().apply { put(docId, state) }
+    }
+
+    fun downloadToDevice(docId: String, fileName: String, context: Context, isShared: Boolean = false) {
+        if (activeDownloadJobs.containsKey(docId)) return
+
+        val job = viewModelScope.launch(Dispatchers.IO) {
+            updateDownloadState(docId, DownloadState.Downloading(0))
+            val notificationId = docId.hashCode()
+            var downloadedUri: Uri? = null
+            var legacyFile: File? = null
+
+            val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setContentTitle("Downloading $fileName")
+                .setContentText("0%")
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+
+            try {
+                val token = "Bearer ${sessionManager.activeAccountFlow.firstOrNull()?.token}"
+                val response = api.downloadSharedDoc(token, docId)
+
+                if (response.isSuccessful && response.body() != null) {
+                    val body = response.body()!!
+                    val mimeType = body.contentType()?.toString() ?: "application/octet-stream"
+                    val safeFileName = fileName.replace(" ", "_")
+                    val totalBytes = body.contentLength()
+
+                    val resolver = context.contentResolver
+                    var outputStream: java.io.OutputStream? = null
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val contentValues = ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, safeFileName)
+                            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/HealthX")
+                            put(MediaStore.MediaColumns.IS_PENDING, 1) // Prevents other apps from reading partial files
+                        }
+                        downloadedUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                        outputStream = downloadedUri?.let { resolver.openOutputStream(it) }
+                    } else {
+                        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                        val healthxDir = File(downloadsDir, "HealthX")
+                        if (!healthxDir.exists()) healthxDir.mkdirs()
+                        legacyFile = File(healthxDir, safeFileName)
+                        outputStream = FileOutputStream(legacyFile)
+                    }
+
+                    outputStream?.use { out ->
+                        body.byteStream().use { input ->
+                            val buffer = ByteArray(8 * 1024)
+                            var bytesCopied = 0L
+                            var read: Int
+                            var lastProgress = 0
+
+                            while (input.read(buffer).also { read = it } >= 0) {
+                                yield() // Throws CancellationException if cancelled
+                                out.write(buffer, 0, read)
+                                bytesCopied += read
+
+                                if (totalBytes > 0) {
+                                    val progress = ((bytesCopied * 100) / totalBytes).toInt()
+                                    if (progress != lastProgress) {
+                                        lastProgress = progress
+                                        updateDownloadState(docId, DownloadState.Downloading(progress))
+
+                                        notificationBuilder.setProgress(100, progress, false)
+                                            .setContentText("$progress%")
+                                        notificationManager.notify(notificationId, notificationBuilder.build())
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Download completed successfully
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && downloadedUri != null) {
+                        val contentValues = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                        resolver.update(downloadedUri, contentValues, null, null)
+                    }
+
+                    updateDownloadState(docId, DownloadState.Success)
+
+                    notificationBuilder.setContentTitle("Download Complete")
+                        .setContentText(safeFileName)
+                        .setProgress(0, 0, false)
+                        .setOngoing(false)
+                        .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                    notificationManager.notify(notificationId, notificationBuilder.build())
+
+                    // Reset UI to idle after 3 seconds
+                    delay(3000)
+                    updateDownloadState(docId, DownloadState.Idle)
+
+                } else {
+                    updateDownloadState(docId, DownloadState.Error(parseError(response.errorBody()?.string())))
+                    notificationManager.cancel(notificationId)
+                }
+            } catch (e: CancellationException) {
+                // User cancelled or app closed. Cleanup!
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && downloadedUri != null) {
+                    context.contentResolver.delete(downloadedUri, null, null)
+                } else if (legacyFile?.exists() == true) {
+                    legacyFile.delete()
+                }
+                updateDownloadState(docId, DownloadState.Idle)
+                notificationManager.cancel(notificationId)
+            } catch (e: Exception) {
+                updateDownloadState(docId, DownloadState.Error(e.localizedMessage ?: "Download failed"))
+                notificationManager.cancel(notificationId)
+            } finally {
+                activeDownloadJobs.remove(docId)
+            }
+        }
+        activeDownloadJobs[docId] = job
+    }
+
+    // === CACHED PREVIEW (For the View Button) ===
+
+    fun previewDocument(docId: String, fileName: String, context: Context, isShared: Boolean = false) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
                 val token = "Bearer ${sessionManager.activeAccountFlow.firstOrNull()?.token}"
-
-                val response = api.downloadSharedDoc(token, docId) // Shared route works for owners too
+                val response = api.downloadSharedDoc(token, docId)
 
                 if (response.isSuccessful && response.body() != null) {
-                    saveAndOpenFile(response.body()!!, fileName, context)
+                    val safeFileName = fileName.replace(" ", "_")
+                    val file = File(context.cacheDir, safeFileName)
+
+                    saveToFile(response.body()!!, file)
+                    openFileWithIntent(file, response.body()!!.contentType()?.toString(), context)
                 } else {
                     _errorMessage.value = parseError(response.errorBody()?.string())
                 }
             } catch (e: Exception) {
-                _errorMessage.value = "Download failed: ${e.localizedMessage}"
+                _errorMessage.value = "Preview failed: ${e.localizedMessage}"
             } finally {
                 _isLoading.value = false
             }
@@ -192,9 +361,13 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                 if (response.isSuccessful && response.body() != null) {
                     val disposition = response.headers()["Content-Disposition"]
                     val fileName = disposition?.substringAfter("filename=\"")?.substringBefore("\"")
-                        ?: "HealthX_Document_${System.currentTimeMillis()}"
+                        ?: "HealthX_Document_${System.currentTimeMillis()}.pdf"
 
-                    saveAndOpenFile(response.body()!!, fileName, context)
+                    val safeFileName = fileName.replace(" ", "_")
+                    val file = File(context.cacheDir, safeFileName)
+
+                    saveToFile(response.body()!!, file)
+                    openFileWithIntent(file, response.body()!!.contentType()?.toString(), context)
                 } else if (response.code() == 401) {
                     isPasswordRequired.value = true
                     _errorMessage.value = "This document is password protected."
@@ -209,41 +382,80 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun saveAndOpenFile(body: ResponseBody, fileName: String, context: Context) {
+    // INTERNAL UTILS
+
+    private fun saveToFile(body: ResponseBody, file: File) {
+        var inputStream: InputStream? = null
+        var outputStream: FileOutputStream? = null
         try {
-            val file = File(context.cacheDir, fileName)
-            var inputStream: InputStream? = null
-            var outputStream: FileOutputStream? = null
-
-            try {
-                inputStream = body.byteStream()
-                outputStream = FileOutputStream(file)
-                val buffer = ByteArray(4096)
-                var read: Int
-                while (inputStream.read(buffer).also { read = it } != -1) {
-                    outputStream.write(buffer, 0, read)
-                }
-                outputStream.flush()
-            } finally {
-                inputStream?.close()
-                outputStream?.close()
+            inputStream = body.byteStream()
+            outputStream = FileOutputStream(file)
+            val buffer = ByteArray(4096)
+            var read: Int
+            while (inputStream.read(buffer).also { read = it } != -1) {
+                outputStream.write(buffer, 0, read)
             }
+            outputStream.flush()
+        } finally {
+            inputStream?.close()
+            outputStream?.close()
+        }
+    }
 
+    private fun openFileWithIntent(file: File, serverMimeType: String?, context: Context) {
+        try {
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+            val extension = file.name.substringAfterLast('.', "")
+            val computedMimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase()) ?: serverMimeType ?: "*/*"
+
             val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, body.contentType()?.toString() ?: "*/*")
+                setDataAndType(uri, computedMimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
-            context.startActivity(intent)
+            val resInfoList = context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            if (resInfoList.isEmpty()) {
+                _errorMessage.value = "No app installed to open this file type."
+                return
+            }
 
+            for (resolveInfo in resInfoList) {
+                context.grantUriPermission(resolveInfo.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            val chooser = Intent.createChooser(intent, "Open Document").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            context.startActivity(chooser)
         } catch (e: Exception) {
             _errorMessage.value = "Failed to open file: ${e.localizedMessage}"
         }
     }
 
-    // === END DOWNLOAD ENGINE ===
+    private fun getFileFromUri(uri: Uri): File? {
+        val contentResolver = context.contentResolver
+        var originalName = "temp_upload_${System.currentTimeMillis()}"
+
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index != -1) {
+                    originalName = cursor.getString(index).replace(" ", "_")
+                }
+            }
+        }
+
+        val file = File(context.cacheDir, originalName)
+        return try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val outputStream = FileOutputStream(file)
+            inputStream?.copyTo(outputStream)
+            inputStream?.close()
+            outputStream.close()
+            file
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     suspend fun getAccessDetails(docId: String): AccessDetailsData? {
         val token = "Bearer ${sessionManager.activeAccountFlow.firstOrNull()?.token}"
@@ -265,115 +477,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
             json.getString("message")
         } catch (e: Exception) {
             "An unknown error occurred."
-        }
-    }
-
-    private fun getFileFromUri(uri: Uri): File? {
-        val contentResolver = context.contentResolver
-        val file = File(context.cacheDir, "temp_upload_${System.currentTimeMillis()}")
-        return try {
-            val inputStream = contentResolver.openInputStream(uri)
-            val outputStream = FileOutputStream(file)
-            inputStream?.copyTo(outputStream)
-            inputStream?.close()
-            outputStream.close()
-            file
-        } catch (e: Exception) {
-            null
-        }
-    }
-    // ... Inside DocsViewModel.kt
-
-
-    // === NEW: ROBUST PREVIEW AND DOWNLOAD ENGINE ===
-
-    fun previewDocument(docId: String, fileName: String, context: Context, isShared: Boolean = false) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val token = "Bearer ${sessionManager.activeAccountFlow.firstOrNull()?.token}"
-                val response = api.downloadSharedDoc(token, docId)
-
-                if (response.isSuccessful && response.body() != null) {
-                    // Preview saves to CacheDir (Cleared when app needs memory)
-                    val file = File(context.cacheDir, fileName.replace(" ", "_"))
-                    saveToFile(response.body()!!, file)
-                    openFileWithIntent(file, response.body()!!.contentType()?.toString(), context)
-                } else {
-                    _errorMessage.value = parseError(response.errorBody()?.string())
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = "Preview failed: ${e.localizedMessage}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
-    fun downloadToDevice(docId: String, fileName: String, context: Context, isShared: Boolean = false) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val token = "Bearer ${sessionManager.activeAccountFlow.firstOrNull()?.token}"
-                val response = api.downloadSharedDoc(token, docId)
-
-                if (response.isSuccessful && response.body() != null) {
-                    // Download saves permanently to the OS Downloads folder
-                    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    val file = File(downloadsDir, fileName.replace(" ", "_"))
-                    saveToFile(response.body()!!, file)
-
-                    Toast.makeText(context, "Saved to Downloads: ${file.name}", Toast.LENGTH_LONG).show()
-                } else {
-                    _errorMessage.value = parseError(response.errorBody()?.string())
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = "Download failed: ${e.localizedMessage}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
-    // Extracted file writing logic
-    private fun saveToFile(body: ResponseBody, file: File) {
-        var inputStream: InputStream? = null
-        var outputStream: FileOutputStream? = null
-        try {
-            inputStream = body.byteStream()
-            outputStream = FileOutputStream(file)
-            val buffer = ByteArray(4096)
-            var read: Int
-            while (inputStream.read(buffer).also { read = it } != -1) {
-                outputStream.write(buffer, 0, read)
-            }
-            outputStream.flush()
-        } finally {
-            inputStream?.close()
-            outputStream?.close()
-        }
-    }
-
-    // FIX FOR THE HANGING VIEWER
-    private fun openFileWithIntent(file: File, mimeType: String?, context: Context) {
-        try {
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, mimeType ?: "*/*")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-
-            // EXPLICITLY GRANT PERMISSION TO ALL APPS THAT CAN HANDLE THIS INTENT (Fixes the blank/hanging screen)
-            val resInfoList = context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-            for (resolveInfo in resInfoList) {
-                val packageName = resolveInfo.activityInfo.packageName
-                context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            _errorMessage.value = "No app found to open this file type."
         }
     }
 }

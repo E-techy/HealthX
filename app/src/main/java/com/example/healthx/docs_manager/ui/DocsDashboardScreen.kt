@@ -36,6 +36,9 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMsg by viewModel.errorMessage.collectAsState()
 
+    // NEW: Observe the Map of download states
+    val downloadStates by viewModel.downloadStates.collectAsState()
+
     var showUploadDialog by remember { mutableStateOf<Uri?>(null) }
     var manageAccessDocId by remember { mutableStateOf<String?>(null) }
     var showPublicFetcher by remember { mutableStateOf(false) }
@@ -111,7 +114,8 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
             )
 
             val filterCategories = listOf("ALL", "HEALTH", "DIAGNOSTICS", "PRESCRIPTION", "NUTRITION_MONTHLY_REPORT", "OTHER")
@@ -170,9 +174,13 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
                     }
 
                     items(docsList) { doc ->
+                        // Pass specific state for this document
+                        val state = downloadStates[doc._id] ?: DownloadState.Idle
+
                         DocumentCard(
                             doc = doc,
                             isOwner = viewModel.currentTab == "MY_DOCS",
+                            downloadState = state,
                             onManageAccess = { manageAccessDocId = doc._id },
                             onDelete = { viewModel.deleteDocument(doc._id) },
                             onView = {
@@ -182,6 +190,9 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
                             onDownload = {
                                 val isShared = viewModel.currentTab == "SHARED"
                                 viewModel.downloadToDevice(doc._id, doc.documentName, context, isShared)
+                            },
+                            onCancelDownload = {
+                                viewModel.cancelDownload(doc._id)
                             }
                         )
                     }

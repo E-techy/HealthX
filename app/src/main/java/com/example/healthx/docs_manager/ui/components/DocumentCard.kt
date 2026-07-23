@@ -13,15 +13,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.healthx.docs_manager.data.DocumentDto
+import com.example.healthx.docs_manager.ui.DownloadState
 
 @Composable
 fun DocumentCard(
     doc: DocumentDto,
     isOwner: Boolean,
+    downloadState: DownloadState?,
     onManageAccess: () -> Unit,
     onDelete: () -> Unit,
-    onView: () -> Unit,      // Trigger Cache Preview
-    onDownload: () -> Unit   // Trigger Permanent Save
+    onView: () -> Unit,
+    onDownload: () -> Unit,
+    onCancelDownload: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -50,44 +53,72 @@ fun DocumentCard(
             }
 
             Text(text = doc.documentCategory, color = Color.Gray, fontSize = 14.sp)
-
             Spacer(modifier = Modifier.height(16.dp))
 
-            // ACTION BUTTONS ROW
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 1. VIEW BUTTON (In-Memory/Cache)
-                    Button(
-                        onClick = onView,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(36.dp)
-                    ) {
-                        Icon(Icons.Default.Visibility, contentDescription = "View", modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("View", fontSize = 12.sp)
+            // DYNAMIC UI: Show Buttons OR Progress Bar depending on state
+            if (downloadState is DownloadState.Downloading) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("Downloading... ${downloadState.progress}%", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = onCancelDownload, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color(0xFFE53935))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = downloadState.progress / 100f,
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color(0xFF2C2C2C)
+                    )
+                }
+            } else if (downloadState is DownloadState.Success) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = "Done", tint = Color(0xFF81C784), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Saved to Downloads", color = Color(0xFF81C784), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                // NORMAL ACTION BUTTONS
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = onView,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Icon(Icons.Default.Visibility, contentDescription = "View", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("View", fontSize = 12.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = onDownload,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = "Save", modifier = Modifier.size(16.dp))
+                        }
                     }
 
-                    // 2. DOWNLOAD BUTTON (Permanent Save)
-                    OutlinedButton(
-                        onClick = onDownload,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(36.dp)
-                    ) {
-                        Icon(Icons.Default.Download, contentDescription = "Save", modifier = Modifier.size(16.dp))
+                    if (isOwner) {
+                        Row {
+                            IconButton(onClick = onManageAccess) { Icon(Icons.Default.AdminPanelSettings, contentDescription = "Access", tint = Color(0xFF64B5F6)) }
+                            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFE53935)) }
+                        }
                     }
                 }
 
-                if (isOwner) {
-                    Row {
-                        IconButton(onClick = onManageAccess) { Icon(Icons.Default.AdminPanelSettings, contentDescription = "Access", tint = Color(0xFF64B5F6)) }
-                        IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFE53935)) }
-                    }
+                // Show inline error if download failed specifically for this doc
+                if (downloadState is DownloadState.Error) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(downloadState.message, color = Color(0xFFE53935), fontSize = 12.sp)
                 }
             }
         }
