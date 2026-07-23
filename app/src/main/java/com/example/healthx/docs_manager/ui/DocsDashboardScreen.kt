@@ -17,17 +17,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.healthx.docs_manager.ui.components.DocAccessManagerDialog
 import com.example.healthx.docs_manager.ui.components.DocumentCard
+import com.example.healthx.docs_manager.ui.components.PublicDocFetcherDialog
 import com.example.healthx.docs_manager.ui.components.UploadDocDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DocsDashboardScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
     val viewModel: DocsViewModel = viewModel()
     val docsList by viewModel.docsList.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -35,8 +38,8 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
 
     var showUploadDialog by remember { mutableStateOf<Uri?>(null) }
     var manageAccessDocId by remember { mutableStateOf<String?>(null) }
+    var showPublicFetcher by remember { mutableStateOf(false) }
 
-    // File Picker
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) showUploadDialog = uri
     }
@@ -44,9 +47,10 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
     if (errorMsg != null) {
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },
-            title = { Text("Error") },
-            text = { Text(errorMsg!!) },
-            confirmButton = { TextButton(onClick = { viewModel.clearError() }) { Text("OK") } }
+            containerColor = Color(0xFF1E1E1E),
+            title = { Text("Information", color = Color.White) },
+            text = { Text(errorMsg!!, color = Color.LightGray) },
+            confirmButton = { TextButton(onClick = { viewModel.clearError() }) { Text("OK", color = MaterialTheme.colorScheme.primary) } }
         )
     }
 
@@ -102,7 +106,10 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = Color(0xFF1E1E1E),
                     unfocusedContainerColor = Color(0xFF1E1E1E),
-                    unfocusedBorderColor = Color.Transparent
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
@@ -143,18 +150,35 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
             // LIST
             if (isLoading && docsList.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(bottom = 100.dp, start = 16.dp, end = 16.dp)
                 ) {
+                    item {
+                        OutlinedButton(
+                            onClick = { showPublicFetcher = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = "Search Public")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Open a Public Link")
+                        }
+                    }
+
                     items(docsList) { doc ->
                         DocumentCard(
                             doc = doc,
                             isOwner = viewModel.currentTab == "MY_DOCS",
                             onManageAccess = { manageAccessDocId = doc._id },
-                            onDelete = { viewModel.deleteDocument(doc._id) }
+                            onDelete = { viewModel.deleteDocument(doc._id) },
+                            onDownload = {
+                                val isShared = viewModel.currentTab == "SHARED"
+                                viewModel.downloadAndPreviewDocument(doc._id, doc.documentName, context, isShared)
+                            }
                         )
                     }
 
@@ -163,7 +187,7 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
                             TextButton(
                                 onClick = { viewModel.loadDocs() },
                                 modifier = Modifier.fillMaxWidth()
-                            ) { Text("Load More") }
+                            ) { Text("Load More", color = MaterialTheme.colorScheme.primary) }
                         }
                     }
                 }
@@ -188,7 +212,14 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
         DocAccessManagerDialog(
             docId = docId,
             viewModel = viewModel,
-            onDismiss = { manageAccessDocId = null; viewModel.loadDocs(true) } // Reload to update badges
+            onDismiss = { manageAccessDocId = null; viewModel.loadDocs(true) }
+        )
+    }
+
+    if (showPublicFetcher) {
+        PublicDocFetcherDialog(
+            viewModel = viewModel,
+            onDismiss = { showPublicFetcher = false; viewModel.isPasswordRequired.value = false }
         )
     }
 }

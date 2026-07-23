@@ -1,8 +1,11 @@
 package com.example.healthx.docs_manager.ui
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.healthx.data.local.SessionManager
@@ -17,10 +20,11 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
-
+import java.io.InputStream
 
 class DocsViewModel(application: Application) : AndroidViewModel(application) {
     private val api = RetrofitClient.docsApi
@@ -35,6 +39,9 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage = _errorMessage.asStateFlow()
+
+    // State for the Public Link Fetcher
+    val isPasswordRequired = MutableStateFlow(false)
 
     // Pagination & Filters
     var currentPage = 1
@@ -70,7 +77,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
 
-                    // Local Search Filtering
                     val filteredData = if (searchQuery.isNotBlank()) {
                         body.data.filter { it.documentName.contains(searchQuery, ignoreCase = true) }
                     } else {
@@ -146,7 +152,96 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // A helper function to fetch Access Details for the Manager Dialog
+    // === NEW: DOWNLOAD AND PREVIEW ENGINE ===
+
+    fun downloadAndPreviewDocument(docId: String, fileName: String, context: Context, isShared: Boolean = false) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val token = "Bearer ${sessionManager.activeAccountFlow.firstOrNull()?.token}"
+
+                val response = api.downloadSharedDoc(token, docId) // Shared route works for owners too
+
+                if (response.isSuccessful && response.body() != null) {
+                    saveAndOpenFile(response.body()!!, fileName, context)
+                } else {
+                    _errorMessage.value = parseError(response.errorBody()?.string())
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Download failed: ${e.localizedMessage}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun fetchPublicDocument(publicKey: String, password: String?, context: Context) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            isPasswordRequired.value = false
+            try {
+                val response = if (password.isNullOrBlank()) {
+                    api.downloadPublicDoc(publicKey)
+                } else {
+                    api.downloadPublicSecureDoc(publicKey, PasswordRequest(password))
+                }
+
+                if (response.isSuccessful && response.body() != null) {
+                    val disposition = response.headers()["Content-Disposition"]
+                    val fileName = disposition?.substringAfter("filename=\"")?.substringBefore("\"")
+                        ?: "HealthX_Document_${System.currentTimeMillis()}"
+
+                    saveAndOpenFile(response.body()!!, fileName, context)
+                } else if (response.code() == 401) {
+                    isPasswordRequired.value = true
+                    _errorMessage.value = "This document is password protected."
+                } else {
+                    _errorMessage.value = parseError(response.errorBody()?.string())
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Fetch failed: ${e.localizedMessage}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    private fun saveAndOpenFile(body: ResponseBody, fileName: String, context: Context) {
+        try {
+            val file = File(context.cacheDir, fileName)
+            var inputStream: InputStream? = null
+            var outputStream: FileOutputStream? = null
+
+            try {
+                inputStream = body.byteStream()
+                outputStream = FileOutputStream(file)
+                val buffer = ByteArray(4096)
+                var read: Int
+                while (inputStream.read(buffer).also { read = it } != -1) {
+                    outputStream.write(buffer, 0, read)
+                }
+                outputStream.flush()
+            } finally {
+                inputStream?.close()
+                outputStream?.close()
+            }
+
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, body.contentType()?.toString() ?: "*/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            context.startActivity(intent)
+
+        } catch (e: Exception) {
+            _errorMessage.value = "Failed to open file: ${e.localizedMessage}"
+        }
+    }
+
+    // === END DOWNLOAD ENGINE ===
+
     suspend fun getAccessDetails(docId: String): AccessDetailsData? {
         val token = "Bearer ${sessionManager.activeAccountFlow.firstOrNull()?.token}"
         val response = api.getAccessDetails(token, docId)
@@ -171,7 +266,6 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun getFileFromUri(uri: Uri): File? {
-        // Utility to copy Uri to a temporary file for Retrofit upload
         val contentResolver = context.contentResolver
         val file = File(context.cacheDir, "temp_upload_${System.currentTimeMillis()}")
         return try {

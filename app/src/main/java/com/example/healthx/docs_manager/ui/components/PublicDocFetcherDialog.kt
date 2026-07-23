@@ -41,7 +41,8 @@ fun PublicDocFetcherDialog(
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = Color.DarkGray
                     ),
                     singleLine = true
                 )
@@ -59,7 +60,8 @@ fun PublicDocFetcherDialog(
                         visualTransformation = PasswordVisualTransformation(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = Color.DarkGray
                         ),
                         singleLine = true
                     )
@@ -69,16 +71,16 @@ fun PublicDocFetcherDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    // Extract just the key if they pasted a full URL
                     val key = inputKey.substringAfterLast("/")
                     viewModel.fetchPublicDocument(key, password.takeIf { it.isNotBlank() }, context)
                 },
-                enabled = inputKey.isNotBlank() && !isLoading
+                enabled = inputKey.isNotBlank() && !isLoading,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                 } else {
-                    Text("Fetch Document")
+                    Text("Fetch Document", color = Color.White)
                 }
             }
         },
