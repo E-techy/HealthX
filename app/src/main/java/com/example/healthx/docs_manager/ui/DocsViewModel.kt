@@ -9,16 +9,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.healthx.R
 import com.example.healthx.data.local.SessionManager
 import com.example.healthx.data.network.RetrofitClient
 import com.example.healthx.docs_manager.data.*
@@ -58,10 +54,8 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage = _errorMessage.asStateFlow()
 
-    // State for the Public Link Fetcher
     val isPasswordRequired = MutableStateFlow(false)
 
-    // Pagination & Filters
     var currentPage = 1
     var hasNextPage = false
     var currentTab = "MY_DOCS"
@@ -193,7 +187,7 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // === LIVE DOWNLOAD ENGINE ===
+    // === LIVE DOWNLOAD ENGINE (STORAGE ACCESS FRAMEWORK & NOTIFICATIONS) ===
 
     fun cancelDownload(docId: String) {
         activeDownloadJobs[docId]?.cancel()
@@ -206,21 +200,21 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
         _downloadStates.value = _downloadStates.value.toMutableMap().apply { put(docId, state) }
     }
 
-    fun downloadToDevice(docId: String, fileName: String, context: Context, isShared: Boolean = false) {
+    fun downloadToUri(docId: String, fileName: String, destUri: Uri, context: Context, isShared: Boolean = false) {
         if (activeDownloadJobs.containsKey(docId)) return
 
         val job = viewModelScope.launch(Dispatchers.IO) {
             updateDownloadState(docId, DownloadState.Downloading(0))
             val notificationId = docId.hashCode()
-            var downloadedUri: Uri? = null
-            var legacyFile: File? = null
 
+            // Initialize the persistent notification builder
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setContentTitle("Downloading $fileName")
                 .setContentText("0%")
-                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setSmallIcon(android.R.drawable.stat_sys_download) // Animated/downloading logo
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
+                .setProgress(100, 0, false)
 
             try {
                 val token = "Bearer ${sessionManager.activeAccountFlow.firstOrNull()?.token}"
@@ -228,31 +222,9 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
-                    val mimeType = body.contentType()?.toString() ?: "application/octet-stream"
-                    val safeFileName = fileName.replace(" ", "_")
                     val totalBytes = body.contentLength()
 
-                    val resolver = context.contentResolver
-                    var outputStream: java.io.OutputStream? = null
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        val contentValues = ContentValues().apply {
-                            put(MediaStore.MediaColumns.DISPLAY_NAME, safeFileName)
-                            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/HealthX")
-                            put(MediaStore.MediaColumns.IS_PENDING, 1) // Prevents other apps from reading partial files
-                        }
-                        downloadedUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-                        outputStream = downloadedUri?.let { resolver.openOutputStream(it) }
-                    } else {
-                        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                        val healthxDir = File(downloadsDir, "HealthX")
-                        if (!healthxDir.exists()) healthxDir.mkdirs()
-                        legacyFile = File(healthxDir, safeFileName)
-                        outputStream = FileOutputStream(legacyFile)
-                    }
-
-                    outputStream?.use { out ->
+                    context.contentResolver.openOutputStream(destUri)?.use { out ->
                         body.byteStream().use { input ->
                             val buffer = ByteArray(8 * 1024)
                             var bytesCopied = 0L
@@ -260,7 +232,7 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                             var lastProgress = 0
 
                             while (input.read(buffer).also { read = it } >= 0) {
-                                yield() // Throws CancellationException if cancelled
+                                yield() // Safely allows cancellation
                                 out.write(buffer, 0, read)
                                 bytesCopied += read
 
@@ -270,6 +242,7 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                                         lastProgress = progress
                                         updateDownloadState(docId, DownloadState.Downloading(progress))
 
+                                        // Update the same notification builder
                                         notificationBuilder.setProgress(100, progress, false)
                                             .setContentText("$progress%")
                                         notificationManager.notify(notificationId, notificationBuilder.build())
@@ -279,22 +252,19 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
 
-                    // Download completed successfully
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && downloadedUri != null) {
-                        val contentValues = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
-                        resolver.update(downloadedUri, contentValues, null, null)
-                    }
-
                     updateDownloadState(docId, DownloadState.Success)
 
-                    notificationBuilder.setContentTitle("Download Complete")
-                        .setContentText(safeFileName)
-                        .setProgress(0, 0, false)
-                        .setOngoing(false)
-                        .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                    // PROPER FIX: Modify the EXACT same builder to strip the progress bar and change the icon
+                    notificationBuilder
+                        .setContentTitle("Download Complete")
+                        .setContentText(fileName)
+                        .setSmallIcon(android.R.drawable.stat_sys_download_done) // Static completed logo
+                        .setProgress(0, 0, false) // THIS removes the progress bar
+                        .setOngoing(false) // Allows the user to swipe it away
+                        .setAutoCancel(true)
+
                     notificationManager.notify(notificationId, notificationBuilder.build())
 
-                    // Reset UI to idle after 3 seconds
                     delay(3000)
                     updateDownloadState(docId, DownloadState.Idle)
 
@@ -303,12 +273,8 @@ class DocsViewModel(application: Application) : AndroidViewModel(application) {
                     notificationManager.cancel(notificationId)
                 }
             } catch (e: CancellationException) {
-                // User cancelled or app closed. Cleanup!
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && downloadedUri != null) {
-                    context.contentResolver.delete(downloadedUri, null, null)
-                } else if (legacyFile?.exists() == true) {
-                    legacyFile.delete()
-                }
+                // Delete the partial file if cancelled mid-download
+                context.contentResolver.delete(destUri, null, null)
                 updateDownloadState(docId, DownloadState.Idle)
                 notificationManager.cancel(notificationId)
             } catch (e: Exception) {

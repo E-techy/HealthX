@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.healthx.docs_manager.data.DocumentDto
 import com.example.healthx.docs_manager.ui.components.DocAccessManagerDialog
 import com.example.healthx.docs_manager.ui.components.DocumentCard
 import com.example.healthx.docs_manager.ui.components.PublicDocFetcherDialog
@@ -36,7 +37,6 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMsg by viewModel.errorMessage.collectAsState()
 
-    // NEW: Observe the Map of download states
     val downloadStates by viewModel.downloadStates.collectAsState()
 
     var showUploadDialog by remember { mutableStateOf<Uri?>(null) }
@@ -45,6 +45,20 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) showUploadDialog = uri
+    }
+
+    // NEW: Native Android Dialog for Location and Name selection
+    var pendingDownloadDoc by remember { mutableStateOf<DocumentDto?>(null) }
+    val createDocLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { uri ->
+        uri?.let {
+            pendingDownloadDoc?.let { doc ->
+                val isShared = viewModel.currentTab == "SHARED"
+                viewModel.downloadToUri(doc._id, doc.documentName, it, context, isShared)
+            }
+        }
+        pendingDownloadDoc = null
     }
 
     if (errorMsg != null) {
@@ -174,7 +188,6 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
                     }
 
                     items(docsList) { doc ->
-                        // Pass specific state for this document
                         val state = downloadStates[doc._id] ?: DownloadState.Idle
 
                         DocumentCard(
@@ -188,8 +201,9 @@ fun DocsDashboardScreen(onBack: () -> Unit) {
                                 viewModel.previewDocument(doc._id, doc.documentName, context, isShared)
                             },
                             onDownload = {
-                                val isShared = viewModel.currentTab == "SHARED"
-                                viewModel.downloadToDevice(doc._id, doc.documentName, context, isShared)
+                                // Trigger native Android location and rename dialog
+                                pendingDownloadDoc = doc
+                                createDocLauncher.launch(doc.documentName)
                             },
                             onCancelDownload = {
                                 viewModel.cancelDownload(doc._id)

@@ -19,7 +19,7 @@ import com.example.healthx.docs_manager.ui.DownloadState
 fun DocumentCard(
     doc: DocumentDto,
     isOwner: Boolean,
-    downloadState: DownloadState?,
+    downloadState: DownloadState,
     onManageAccess: () -> Unit,
     onDelete: () -> Unit,
     onView: () -> Unit,
@@ -76,7 +76,7 @@ fun DocumentCard(
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.CheckCircle, contentDescription = "Done", tint = Color(0xFF81C784), modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Saved to Downloads", color = Color(0xFF81C784), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("Saved successfully", color = Color(0xFF81C784), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             } else {
                 // NORMAL ACTION BUTTONS
@@ -115,7 +115,6 @@ fun DocumentCard(
                     }
                 }
 
-                // Show inline error if download failed specifically for this doc
                 if (downloadState is DownloadState.Error) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(downloadState.message, color = Color(0xFFE53935), fontSize = 12.sp)
